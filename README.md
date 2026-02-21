@@ -1,0 +1,70 @@
+# UBL CORE
+
+Open-source deterministic runtime for chip processing, cryptographic receipts, policy enforcement, and operational rollout controls.
+
+## Scope
+
+`UBL-CORE` is the OSS foundation:
+
+- deterministic gate pipeline (`KNOCK -> WA -> CHECK -> TR -> WF`)
+- runtime and canon primitives
+- receipts and attestation
+- CLI, MCP gateway, stores, and core connectors
+
+Product shells stay outside this repo and currently live at:
+- [danvoulez/UBL-SHELLS](https://github.com/danvoulez/UBL-SHELLS)
+
+## Quick Start
+
+```bash
+cargo build --workspace
+cargo test --workspace
+cargo run -p ubl_gate
+```
+
+Gate default: `http://localhost:4000`
+
+## Primary Endpoints
+
+- `POST /v1/chips`
+- `GET /v1/chips/:cid`
+- `GET /v1/chips/:cid/verify`
+- `GET /v1/receipts/:cid/trace`
+- `GET /v1/receipts/:cid/narrate`
+- `GET /v1/runtime/attestation`
+- `GET /metrics`
+- `GET /openapi.json`
+- `POST /mcp/rpc`
+
+## Documentation
+
+- Entry point: `docs/INDEX.md`
+- Canonical runtime entrypoint: `START-HERE.md`
+- Architecture: `ARCHITECTURE.md`
+- Security policy: `SECURITY.md`
+- Governance: `GOVERNANCE.md`
+- RFC process: `RFC_PROCESS.md`
+- Versioning policy: `VERSIONING.md`
+- Compatibility policy: `COMPATIBILITY.md`
+- OSS scope/boundary: `docs/oss/OPEN_SOURCE_SCOPE.md`
+- Contributing: `CONTRIBUTING.md`
+- Code of conduct: `CODE_OF_CONDUCT.md`
+- Support policy: `SUPPORT.md`
+- Trademark policy: `TRADEMARK_POLICY.md`
+- Commercial model: `COMMERCIAL-LICENSING.md`
+- Docs attestation: `docs/security/DOC_ATTESTATION.md`
+
+## Release Model
+
+- Pushing a tag `v*` creates a candidate release automatically.
+- Manual promotion to official/latest is done via workflow `Release From Tag`.
+
+## License
+
+Licensed under Apache-2.0. See `LICENSE`.
+See also `NOTICE` and `COPYRIGHT`.
+
+## Security Notes
+
+- Production signature path is Ed25519 (receipt/runtime attestations).
+- PQ dual-sign (`ML-DSA3`) is feature-gated as a rollout stub (`ubl_kms/pq_mldsa3`): wire/API shape exists and PQ signature currently returns `None` until backend integration is completed.
