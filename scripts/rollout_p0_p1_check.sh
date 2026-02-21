@@ -10,6 +10,8 @@ NOW_OVERRIDE=""
 BREAK_GLASS=false
 BREAK_GLASS_REASON="bootstrap.break_glass"
 ALLOW_PLACEHOLDER_SIGNATURES=false
+IGNORE_RUNTIME_HASH=false
+IGNORE_ACTIVATION_WINDOW=false
 REPORT_FILE=""
 
 usage() {
@@ -27,6 +29,8 @@ Options:
   --break-glass                       Enable emergency fallback mode (P0 only)
   --break-glass-reason <code>         Reason code for break-glass
   --allow-placeholder-signatures      Allow PLACEHOLDER signatures (dev only)
+  --ignore-runtime-hash               Do not fail if runtime hash is not in allowlist (CI ephemeral builds)
+  --ignore-activation-window          Do not fail activation lead-time check (CI replay mode)
   --report-file <path>                Optional path to write JSON report
   -h, --help                          Show this help
 EOF
@@ -43,6 +47,8 @@ while [[ $# -gt 0 ]]; do
     --break-glass) BREAK_GLASS=true; shift ;;
     --break-glass-reason) BREAK_GLASS_REASON="${2:-}"; shift 2 ;;
     --allow-placeholder-signatures) ALLOW_PLACEHOLDER_SIGNATURES=true; shift ;;
+    --ignore-runtime-hash) IGNORE_RUNTIME_HASH=true; shift ;;
+    --ignore-activation-window) IGNORE_ACTIVATION_WINDOW=true; shift ;;
     --report-file) REPORT_FILE="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
@@ -163,9 +169,9 @@ fi
 FAILURES=()
 if [[ "$P0_TYPE_OK" != true ]]; then FAILURES+=("p0.type_invalid"); fi
 if [[ "$P1_TYPE_OK" != true ]]; then FAILURES+=("p1.type_invalid"); fi
-if [[ "$RUNTIME_OK" != true ]]; then FAILURES+=("runtime.hash_not_allowed"); fi
+if [[ "$RUNTIME_OK" != true && "$IGNORE_RUNTIME_HASH" != true ]]; then FAILURES+=("runtime.hash_not_allowed"); fi
 if [[ "$PARENT_OK" != true ]]; then FAILURES+=("p1.parent_mismatch"); fi
-if [[ "$LEAD_OK" != true ]]; then FAILURES+=("p1.activation_window_invalid"); fi
+if [[ "$LEAD_OK" != true && "$IGNORE_ACTIVATION_WINDOW" != true ]]; then FAILURES+=("p1.activation_window_invalid"); fi
 if [[ "$QUORUM_OK" != true ]]; then FAILURES+=("policy.quorum_not_met"); fi
 if [[ "$PLACEHOLDER_OK" != true ]]; then FAILURES+=("policy.placeholder_signature_present"); fi
 if [[ "$CORE_TYPES_OK" != true ]]; then FAILURES+=("p1.core_types_missing"); fi
@@ -199,6 +205,8 @@ REPORT="$(jq -n \
   --argjson quorum_ok "$QUORUM_OK" \
   --argjson placeholder_ok "$PLACEHOLDER_OK" \
   --argjson core_types_ok "$CORE_TYPES_OK" \
+  --argjson runtime_hash_enforced "$([[ "$IGNORE_RUNTIME_HASH" == true ]] && echo false || echo true)" \
+  --argjson activation_window_enforced "$([[ "$IGNORE_ACTIVATION_WINDOW" == true ]] && echo false || echo true)" \
   --argjson failures "$FAILURES_JSON" \
   --argjson core_types_missing "$CORE_TYPES_MISSING_JSON" \
   --arg break_glass_reason "$BREAK_GLASS_REASON" \
@@ -210,7 +218,9 @@ REPORT="$(jq -n \
     activation_time: $activation_time,
     checks: {
       runtime_hash_allowed: $runtime_ok,
+      runtime_hash_enforced: $runtime_hash_enforced,
       activation_window_ok: $lead_ok,
+      activation_window_enforced: $activation_window_enforced,
       min_lead_seconds: $min_lead_seconds,
       lead_seconds: $lead_seconds,
       quorum_ok: $quorum_ok,
