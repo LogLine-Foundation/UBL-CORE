@@ -1845,7 +1845,9 @@ if [[ ! -f "$GATE_RUNNER" ]]; then
   cat > "$GATE_RUNNER" <<RUNNER
 #!/usr/bin/env bash
 set -euo pipefail
+set -a
 source "$RUNTIME_ENV"
+set +a
 exec "$LIVE_DIR/current/bin/ubl_gate"
 RUNNER
   chmod +x "$GATE_RUNNER"
