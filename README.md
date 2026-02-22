@@ -31,6 +31,7 @@ Gate default: `http://localhost:4000`
 - `GET /v1/chips/:cid/verify`
 - `GET /v1/receipts/:cid/trace`
 - `GET /v1/receipts/:cid/narrate`
+- `GET /v1/receipts/:cid/url`
 - `GET /v1/runtime/attestation`
 - `GET /metrics`
 - `GET /openapi.json`
@@ -53,6 +54,11 @@ Gate default: `http://localhost:4000`
 - Trademark policy: `TRADEMARK_POLICY.md`
 - Commercial model: `COMMERCIAL-LICENSING.md`
 - Docs attestation: `docs/security/DOC_ATTESTATION.md`
+- Forever host bootstrap runbook: `docs/ops/FOREVER_BOOTSTRAP.md`
+- Cloudflare edge baseline: `docs/ops/CLOUDFLARE_EDGE_BASELINE.md`
+- Host lockdown and cleanup: `docs/ops/HOST_LOCKDOWN_AND_CLEANUP.md`
+- Key rotation plan: `docs/key_rotation_plan.md`
+- Offline receipt verification: `docs/ops/OFFLINE_RECEIPT_VERIFICATION.md`
 
 ## Release Model
 

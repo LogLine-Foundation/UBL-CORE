@@ -843,7 +843,7 @@ _Note: sprint-phase test numbers in this section are historical snapshots at del
 | **H1** Signing key from env | `ubl_kms` crate, `signing_key_from_env()`, domain separation | 16 |
 | **H2** Real DID resolution | All placeholder DIDs replaced, `did:key:z...` derived from Ed25519 via `ubl_kms` | — |
 | **H3** `NaiveCanon` → full ρ | `RhoCanon` in `rb_vm/src/canon.rs`, NFC, BOM rejection, null stripping, key sorting, idempotent | 19 |
-| **H4** P0→P1 rollout automation | `scripts/rollout_p0_p1_check.sh` + `make rollout-check` preflight (runtime hash allowlist, activation window, quorum, break-glass) | — |
+| **H4** P0→P1 rollout automation | Chip-native governance flow (proposal/activation receipts + traces + witness), no external preflight script as source of truth | — |
 | **H7** Signature domain separation | `domain::RECEIPT`, `RB_VM`, `CAPSULE`, `CHIP` in `ubl_kms` | — |
 | **H8** Rate limiting | Sliding-window per-key, `GateRateLimiter` (IP/tenant/DID), `prune()` | 13 |
 | **H9** UNC-1 core ops | `ubl_unc1` crate: add/sub/mul/div with promotion, `to_dec`, `to_rat`, `from_f64_bits`, BND intervals | 57 |

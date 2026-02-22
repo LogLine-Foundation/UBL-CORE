@@ -30,6 +30,6 @@ A release is ready only when all gates below are green.
 
 1. CI test run URL or artifact set.
 2. Metrics snapshot from `/metrics` plus dashboard export.
-3. Rollout preflight output (`make rollout-check`).
+3. Rollout governance receipts (proposal + activation CIDs and traces).
 4. Incident drill notes (`docs/ops/INCIDENT_RUNBOOK.md`).
-5. Canary report (`docs/ops/PRODUCTION_SLICE_CANARY.md`).
+5. Canary evidence from ledger receipts/traces (`docs/ops/PRODUCTION_SLICE_CANARY.md`).

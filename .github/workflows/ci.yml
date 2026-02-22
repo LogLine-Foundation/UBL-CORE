@@ -141,36 +141,39 @@ jobs:
           cargo semver-checks check-release --baseline-rev origin/main
         continue-on-error: true
 
-  rollout_check:
-    name: "🚦 Rollout Check (${{ matrix.os }})"
+  conformance:
+    name: "📏 CONFORMANCE"
     needs: tr
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
+        id: toolchain
 
-      - name: Build Gate Binary
-        run: cargo build -p ubl_gate
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: ${{ runner.os }}-${{ steps.toolchain.outputs.rustc_hash }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ steps.toolchain.outputs.rustc_hash }}-
 
-      - name: Rollout P0→P1 Preflight
-        shell: bash
+      - name: Run Conformance Suite
         run: |
-          if command -v sha256sum >/dev/null 2>&1; then
-            RUNTIME_HASH="$(sha256sum target/debug/ubl_gate | cut -d' ' -f1)"
-          else
-            RUNTIME_HASH="$(shasum -a 256 target/debug/ubl_gate | awk '{print $1}')"
-          fi
-          bash scripts/rollout_p0_p1_check.sh \
-            --runtime-hash "$RUNTIME_HASH" \
-            --allow-placeholder-signatures \
-            --ignore-runtime-hash \
-            --ignore-activation-window \
-            --report-file ./data/rollout_report.json
+          chmod +x scripts/conformance_suite.sh
+          scripts/conformance_suite.sh --out-dir artifacts/conformance
+
+      - name: Upload Conformance Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-report
+          path: artifacts/conformance
+          retention-days: 30
 
   simkit_stx:
     name: "🧪 SIMKIT-STX"
@@ -264,7 +267,7 @@ jobs:
 
   wf:
     name: "✅ WF"
-    needs: [knock, wa, tr, execute, rollout_check, simkit_stx]
+    needs: [knock, wa, tr, execute, conformance, simkit_stx]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -285,12 +288,14 @@ jobs:
           echo "  WA:      ${{ needs.wa.result }}"
           echo "  TR:      ${{ needs.tr.result }}"
           echo "  EXECUTE: ${{ needs.execute.result }}"
+          echo "  CONFORM: ${{ needs.conformance.result }}"
           echo "  SIMKIT:  ${{ needs.simkit_stx.result }}"
           echo ""
 
           if [[ "${{ needs.wa.result }}" == "success" && \
                 "${{ needs.tr.result }}" == "success" && \
                 "${{ needs.execute.result }}" == "success" && \
+                "${{ needs.conformance.result }}" == "success" && \
                 ("${{ needs.simkit_stx.result }}" == "success" || "${{ needs.simkit_stx.result }}" == "skipped") ]]; then
             echo "decision=ALLOW" >> "$GITHUB_ENV"
             echo "🟢 DECISION: ALLOW"
@@ -316,6 +321,7 @@ jobs:
               "wa": "${{ needs.wa.result }}",
               "tr": "${{ needs.tr.result }}",
               "execute": "${{ needs.execute.result }}",
+              "conformance": "${{ needs.conformance.result }}",
               "simkit_stx": "${{ needs.simkit_stx.result }}"
             },
             "pipeline": "WA→TR→WF",

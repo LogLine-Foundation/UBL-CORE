@@ -54,6 +54,56 @@ async fn pipeline_allow_flow_with_real_vm() {
     let wf_body = &result.final_receipt.body;
     assert_eq!(wf_body["decision"], "Allow");
     assert!(!wf_body["short_circuited"].as_bool().unwrap());
+
+    // Authorship anchors are always present in receipt.
+    assert!(result
+        .receipt
+        .subject_did
+        .as_deref()
+        .map(|v| v.starts_with("did:"))
+        .unwrap_or(false));
+    assert!(result
+        .receipt
+        .knock_cid
+        .as_ref()
+        .map(|v| v.as_str().starts_with("b3:"))
+        .unwrap_or(false));
+}
+
+#[tokio::test]
+async fn process_chip_with_context_sets_subject_and_knock_cid() {
+    let storage = InMemoryPolicyStorage::new();
+    let pipeline = UblPipeline::new(Box::new(storage));
+
+    let request = ChipRequest {
+        chip_type: "ubl/document".to_string(),
+        body: json!({
+            "@type": "ubl/document",
+            "@id": "ctx-001",
+            "@ver": "1.0",
+            "@world": "a/demo/t/main",
+            "title": "Context-provided subject"
+        }),
+        parents: vec![],
+        operation: Some("create".to_string()),
+    };
+    let ctx = AuthorshipContext {
+        subject_did_hint: Some("did:key:zCaller".to_string()),
+        knock_cid: Some("b3:knock-ctx".to_string()),
+    };
+
+    let result = pipeline
+        .process_chip_with_context(request, ctx)
+        .await
+        .unwrap();
+    assert_eq!(
+        result.receipt.subject_did.as_deref(),
+        Some("did:key:zCaller")
+    );
+    assert_eq!(
+        result.receipt.knock_cid.as_ref().map(|v| v.as_str()),
+        Some("b3:knock-ctx")
+    );
 }
 
 #[tokio::test]
@@ -79,6 +129,34 @@ async fn pipeline_deny_flow_skips_vm() {
     assert!(matches!(result.decision, Decision::Deny));
     // Chain should have WA + "no-tr" + WF (VM never ran)
     assert_eq!(result.chain[1], "no-tr", "TR must be skipped on deny");
+}
+
+#[tokio::test]
+async fn knock_rejection_produces_signed_deny_receipt() {
+    let storage = InMemoryPolicyStorage::new();
+    let pipeline = UblPipeline::new(Box::new(storage));
+
+    let result = pipeline
+        .process_knock_rejection(
+            "b3:knock-test",
+            "KNOCK-007",
+            "KNOCK-007: body is not a JSON object",
+            Some("did:ubl:anon:b3:test".to_string()),
+        )
+        .await
+        .unwrap();
+
+    assert!(matches!(result.decision, Decision::Deny));
+    assert_eq!(result.receipt.receipt_type, "ubl/knock.deny.v1");
+    assert_eq!(
+        result.receipt.subject_did.as_deref(),
+        Some("did:ubl:anon:b3:test")
+    );
+    assert_eq!(
+        result.receipt.knock_cid.as_ref().map(|v| v.as_str()),
+        Some("b3:knock-test")
+    );
+    assert!(!result.receipt.sig.is_empty());
 }
 
 #[tokio::test]

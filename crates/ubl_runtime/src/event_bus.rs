@@ -79,6 +79,12 @@ pub struct ReceiptEvent {
     /// Actor DID (pipeline executor)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub actor: Option<String>,
+    /// Subject DID (authorship identity)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subject_did: Option<String>,
+    /// Knock/envelope CID
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub knock_cid: Option<String>,
     /// Stage latency in milliseconds
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latency_ms: Option<i64>,
@@ -93,6 +99,8 @@ pub struct StageEventContext {
     pub binary_hash: Option<String>,
     pub build_meta: Option<serde_json::Value>,
     pub actor: Option<String>,
+    pub subject_did: Option<String>,
+    pub knock_cid: Option<String>,
 }
 
 impl ReceiptEvent {
@@ -125,6 +133,8 @@ impl ReceiptEvent {
             build_meta: None,
             world: None,
             actor: None,
+            subject_did: None,
+            knock_cid: None,
             latency_ms: None,
         }
     }
@@ -152,6 +162,8 @@ impl ReceiptEvent {
         event.build_meta = ctx.build_meta;
         event.world = ctx.world;
         event.actor = ctx.actor;
+        event.subject_did = ctx.subject_did;
+        event.knock_cid = ctx.knock_cid;
         event.latency_ms = event.duration_ms;
 
         // Extract fuel_used and rb_count from receipt body if present.
@@ -222,6 +234,8 @@ impl From<&UnifiedReceipt> for ReceiptEvent {
         event.rb_count = rb_count;
         event.world = Some(receipt.world.as_str().to_string());
         event.actor = Some(receipt.did.as_str().to_string());
+        event.subject_did = receipt.subject_did.clone();
+        event.knock_cid = receipt.knock_cid.as_ref().map(|c| c.as_str().to_string());
         event.latency_ms = duration_ms;
         if let Some(rt) = &receipt.rt {
             event.binary_hash = Some(rt.binary_hash.clone());
@@ -428,6 +442,8 @@ mod tests {
                 binary_hash: Some("b3:bin".to_string()),
                 build_meta: Some(json!({"rustc":"x"})),
                 actor: Some("did:key:zX".to_string()),
+                subject_did: Some("did:ubl:anon:b3:test".to_string()),
+                knock_cid: Some("b3:knock".to_string()),
             },
         );
 

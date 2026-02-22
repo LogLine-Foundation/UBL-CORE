@@ -1,4 +1,5 @@
 use serde_json::{Map, Value};
+use std::collections::HashSet;
 use unicode_normalization::UnicodeNormalization;
 
 /// Trait para prover a canon NRF/JSON real (plugável).
@@ -33,10 +34,13 @@ impl CanonProvider for NaiveCanon {
 
 /// Full ρ (rho) canonicalization — Article I of the Constitution of the Base.
 ///
-/// Enforces all ρ rules:
+/// `validate()` enforces strict ρ rules.
+/// `canon()` is best-effort and deterministic for runtime use.
+///
+/// Strict ρ rules:
 /// 1. Strings → NFC normalized, BOM rejected, control chars rejected
-/// 2. Maps → null values REMOVED (absence ≠ null), keys sorted, keys NFC-validated
-/// 3. Numbers → must be i64 (floats rejected)
+/// 2. Maps → null values REMOVED (absence ≠ null), duplicate keys after NFC rejected
+/// 3. Numbers → raw floats rejected by validator (UNC-1 path)
 /// 4. Recursion → leaves first, then containers
 /// 5. Passthrough → Null, Bool, Int64 unchanged
 ///
@@ -71,9 +75,7 @@ impl RhoCanon {
                 if s.contains('\u{feff}') {
                     errors.push(format!("{}: BOM present", path));
                 }
-                if s.chars()
-                    .any(|c| c <= '\u{001f}' && c != '\n' && c != '\r' && c != '\t')
-                {
+                if s.chars().any(|c| c <= '\u{001f}') {
                     errors.push(format!("{}: control character present", path));
                 }
                 let nfc: String = s.nfc().collect();
@@ -87,7 +89,25 @@ impl RhoCanon {
                 }
             }
             Value::Object(map) => {
+                let mut seen_norm_keys = HashSet::new();
                 for (k, val) in map {
+                    let key_path = format!("{}.{}", path, k);
+                    if k.contains('\u{feff}') {
+                        errors.push(format!("{}: BOM present in key", key_path));
+                    }
+                    if k.chars().any(|c| c <= '\u{001f}') {
+                        errors.push(format!("{}: control character present in key", key_path));
+                    }
+                    let key_nfc: String = k.nfc().collect();
+                    if key_nfc != *k {
+                        errors.push(format!("{}: key not NFC normalized", key_path));
+                    }
+                    if !seen_norm_keys.insert(key_nfc.clone()) {
+                        errors.push(format!(
+                            "{}: duplicate key after NFC normalization ({})",
+                            path, key_nfc
+                        ));
+                    }
                     if val.is_null() {
                         errors.push(format!(
                             "{}.{}: null value in map (should be absent)",
@@ -105,9 +125,7 @@ impl RhoCanon {
         if s.contains('\u{feff}') {
             return Err("BOM present in string".to_string());
         }
-        if s.chars()
-            .any(|c| c <= '\u{001f}' && c != '\n' && c != '\r' && c != '\t')
-        {
+        if s.chars().any(|c| c <= '\u{001f}') {
             return Err("Control character present in string".to_string());
         }
         // NFC normalize
@@ -120,20 +138,13 @@ impl RhoCanon {
     /// if strict validation fails (canon provider must not panic).
     ///
     /// UNC-1 §3: raw floats are NEVER canonical. Only i64/u64 integers pass.
-    /// Floats are replaced with a poison string so downstream layers (KNOCK/NRF)
-    /// reject them with a clear error rather than silently hashing non-deterministic bits.
+    /// In best-effort mode, non-canonical numbers are preserved and must be
+    /// rejected by strict validators at pipeline boundaries.
     fn rho(v: Value) -> Value {
         match v {
             Value::Null => Value::Null,
             Value::Bool(b) => Value::Bool(b),
-            Value::Number(n) => {
-                if n.is_i64() || n.is_u64() {
-                    Value::Number(n)
-                } else {
-                    // UNC-1: raw float → poison. Use @num atoms instead.
-                    Value::String(format!("__FLOAT_REJECTED:{}", n))
-                }
-            }
+            Value::Number(n) => Value::Number(n),
             Value::String(s) => {
                 match Self::validate_string(&s) {
                     Ok(normalized) => Value::String(normalized),
@@ -152,12 +163,9 @@ impl RhoCanon {
                     if val.is_null() {
                         continue;
                     }
-                    // NFC normalize the key
-                    let canon_key = match Self::validate_string(&k) {
-                        Ok(normalized) => normalized,
-                        Err(_) => k, // best-effort
-                    };
-                    sorted.insert(canon_key, Self::rho(val));
+                    // Keep raw key in best-effort path to avoid silent data loss
+                    // when multiple keys collide after normalization.
+                    sorted.insert(k, Self::rho(val));
                 }
                 Value::Object(sorted)
             }
@@ -224,13 +232,13 @@ mod tests {
     }
 
     #[test]
-    fn rho_nfc_normalizes_keys() {
+    fn rho_best_effort_preserves_non_nfc_keys() {
         let nfd_key = "caf\u{0065}\u{0301}".to_string();
         let mut map = Map::new();
         map.insert(nfd_key, json!(1));
         let input = Value::Object(map);
         let out = RhoCanon.canon(input);
-        assert!(out.as_object().unwrap().contains_key("caf\u{00e9}"));
+        assert!(out.as_object().unwrap().contains_key("caf\u{0065}\u{0301}"));
     }
 
     #[test]
@@ -286,21 +294,17 @@ mod tests {
         // UNC-1 §3: raw floats must never enter the canon
         let input = json!({"amount": 12.34});
         let out = RhoCanon.canon(input);
-        let s = out["amount"].as_str().unwrap();
-        assert!(
-            s.starts_with("__FLOAT_REJECTED:"),
-            "float must be poisoned: {}",
-            s
-        );
+        assert!(out["amount"].is_number());
+        assert!(RhoCanon::validate(&out).is_err());
     }
 
     #[test]
     fn rho_rejects_nested_floats() {
         let input = json!({"outer": {"price": 9.99, "count": 3}});
         let out = RhoCanon.canon(input);
-        let price = out["outer"]["price"].as_str().unwrap();
-        assert!(price.starts_with("__FLOAT_REJECTED:"));
+        assert!(out["outer"]["price"].is_number());
         assert_eq!(out["outer"]["count"], 3); // integer preserved
+        assert!(RhoCanon::validate(&out).is_err());
     }
 
     #[test]
@@ -308,8 +312,9 @@ mod tests {
         let input = json!([1, 2.5, 3]);
         let out = RhoCanon.canon(input);
         assert_eq!(out[0], 1);
-        assert!(out[1].as_str().unwrap().starts_with("__FLOAT_REJECTED:"));
+        assert!(out[1].is_number());
         assert_eq!(out[2], 3);
+        assert!(RhoCanon::validate(&out).is_err());
     }
 
     #[test]
@@ -335,6 +340,22 @@ mod tests {
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors[0].contains("null value in map"));
+    }
+
+    #[test]
+    fn rho_validate_catches_duplicate_keys_after_nfc() {
+        let mut map = Map::new();
+        map.insert("Cafe\u{0301}".to_string(), json!(1));
+        map.insert("Caf\u{00e9}".to_string(), json!(2));
+        let result = RhoCanon::validate(&Value::Object(map));
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("duplicate key after NFC normalization")),
+            "expected NFC duplicate-key error, got: {errors:?}"
+        );
     }
 
     #[test]

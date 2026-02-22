@@ -12,6 +12,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::io::{Read, Write};
 
 /// Signing domain for URL signatures.
@@ -19,6 +20,36 @@ pub const URL_SIGN_DOMAIN: &str = ubl_canon::domains::RICH_URL;
 
 /// Maximum self-contained URL length (QR code limit).
 pub const MAX_SELF_CONTAINED_URL_BYTES: usize = 2048;
+pub const PUBLIC_RECEIPT_MODEL_V1: &str = "ubl:v1";
+
+/// Canonical portable receipt token carried in `https://<rich>/r#ubl:v1:<token>`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PublicReceiptTokenV1 {
+    pub v: u8,
+    pub r: String,
+    pub c: String,
+    pub g: String,
+    pub k: String,
+    pub alg: String,
+    pub sig: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub did: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rc: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bh: Option<String>,
+}
+
+/// Rendered public receipt URL and portable payload components.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PublicReceiptLink {
+    pub model: String,
+    pub origin: String,
+    pub path: String,
+    pub url: String,
+    pub token: String,
+    pub payload: PublicReceiptTokenV1,
+}
 
 /// A hosted Rich URL with all verification fragments.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -264,6 +295,149 @@ impl SelfContainedUrl {
     }
 }
 
+/// Build a canonical portable token (`ubl:v1`) from a receipt JSON document.
+///
+/// This logic belongs to core runtime and must be the single source of truth.
+pub fn build_public_receipt_token_v1(
+    receipt: &Value,
+    genesis_pubkey_sha256: Option<&str>,
+    release_commit: Option<&str>,
+    gate_binary_sha256: Option<&str>,
+) -> Result<PublicReceiptTokenV1, UrlError> {
+    let receipt_cid = receipt
+        .get("receipt_cid")
+        .or_else(|| receipt.get("@id"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| UrlError::InvalidFormat("receipt missing receipt_cid".into()))?
+        .to_string();
+
+    let chip_cid = receipt
+        .get("stages")
+        .and_then(Value::as_array)
+        .and_then(|stages| {
+            stages.iter().find_map(|stage| {
+                let is_wa = stage
+                    .get("stage")
+                    .and_then(Value::as_str)
+                    .map(|s| s.eq_ignore_ascii_case("WA"))
+                    .unwrap_or(false);
+                if is_wa {
+                    stage.get("input_cid").and_then(Value::as_str)
+                } else {
+                    None
+                }
+            })
+        })
+        .or_else(|| {
+            receipt
+                .get("stages")
+                .and_then(Value::as_array)
+                .and_then(|stages| stages.first())
+                .and_then(|stage| stage.get("input_cid"))
+                .and_then(Value::as_str)
+        })
+        .ok_or_else(|| UrlError::InvalidFormat("receipt missing chip input CID".into()))?
+        .to_string();
+
+    let signer_key = receipt
+        .get("kid")
+        .or_else(|| receipt.get("did"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| UrlError::InvalidFormat("receipt missing signer key (kid/did)".into()))?
+        .to_string();
+
+    let did_opt = receipt
+        .get("did")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+
+    let sig = receipt
+        .get("sig")
+        .and_then(Value::as_str)
+        .ok_or_else(|| UrlError::InvalidFormat("receipt missing signature".into()))?
+        .to_string();
+
+    let alg = sig
+        .split_once(':')
+        .map(|(a, _)| a.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    let genesis_anchor = genesis_pubkey_sha256.unwrap_or("").to_string();
+    let release_commit_opt = release_commit
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string);
+    let binary_hash_opt = gate_binary_sha256
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+        .or_else(|| {
+            receipt
+                .get("rt")
+                .and_then(|rt| rt.get("binary_hash").or_else(|| rt.get("runtime_hash")))
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+        });
+
+    Ok(PublicReceiptTokenV1 {
+        v: 1,
+        r: receipt_cid,
+        c: chip_cid,
+        g: genesis_anchor,
+        k: signer_key,
+        alg,
+        sig,
+        did: did_opt,
+        rc: release_commit_opt,
+        bh: binary_hash_opt,
+    })
+}
+
+/// Build canonical public receipt URL (`https://<origin>/<path>#ubl:v1:<token>`).
+pub fn build_public_receipt_link_v1(
+    origin: &str,
+    path: &str,
+    payload: &PublicReceiptTokenV1,
+) -> Result<PublicReceiptLink, UrlError> {
+    let origin_norm = origin.trim_end_matches('/').to_string();
+    if !(origin_norm.starts_with("http://") || origin_norm.starts_with("https://")) {
+        return Err(UrlError::InvalidFormat(
+            "public receipt origin must start with http:// or https://".into(),
+        ));
+    }
+
+    let path_norm = {
+        let raw = path.trim();
+        if raw.is_empty() {
+            "/r".to_string()
+        } else if raw.starts_with('/') {
+            raw.to_string()
+        } else {
+            format!("/{}", raw)
+        }
+    };
+
+    let payload_value = serde_json::to_value(payload)
+        .map_err(|e| UrlError::Encoding(format!("payload encode: {}", e)))?;
+    let payload_canonical_value = canonicalize_json(payload_value);
+    let payload_json = serde_json::to_string(&payload_canonical_value)
+        .map_err(|e| UrlError::Encoding(format!("payload json: {}", e)))?;
+    let token = base64url_encode(payload_json.as_bytes());
+    let url = format!(
+        "{}{}#{}:{}",
+        origin_norm, path_norm, PUBLIC_RECEIPT_MODEL_V1, token
+    );
+
+    Ok(PublicReceiptLink {
+        model: PUBLIC_RECEIPT_MODEL_V1.to_string(),
+        origin: origin_norm,
+        path: path_norm,
+        url,
+        token,
+        payload: payload.clone(),
+    })
+}
+
 /// Offline verification result.
 #[derive(Debug, Clone)]
 pub struct VerificationResult {
@@ -496,6 +670,24 @@ fn parse_query_params(query: &str) -> std::collections::HashMap<String, String> 
             Some((k.to_string(), v.to_string()))
         })
         .collect()
+}
+
+fn canonicalize_json(v: Value) -> Value {
+    match v {
+        Value::Object(map) => {
+            let mut sorted = BTreeMap::new();
+            for (k, val) in map {
+                sorted.insert(k, canonicalize_json(val));
+            }
+            let mut out = serde_json::Map::new();
+            for (k, val) in sorted {
+                out.insert(k, val);
+            }
+            Value::Object(out)
+        }
+        Value::Array(arr) => Value::Array(arr.into_iter().map(canonicalize_json).collect()),
+        other => other,
+    }
 }
 
 fn verify_signature_by_env(
@@ -882,5 +1074,55 @@ mod tests {
         assert!(
             ubl_canon::verify_raw_v1(&url.signing_payload(), URL_SIGN_DOMAIN, &vk, &sig).unwrap()
         );
+    }
+
+    #[test]
+    fn public_receipt_link_v1_builds_from_receipt() {
+        let receipt = json!({
+            "@type": "ubl/receipt",
+            "@id": "b3:r1",
+            "receipt_cid": "b3:r1",
+            "did": "did:key:zTest",
+            "kid": "did:key:zTest#ed25519",
+            "sig": "ed25519:abc",
+            "stages": [
+                {"stage":"WA", "input_cid":"b3:c1"}
+            ],
+            "rt": {"binary_hash":"b3:bh1"}
+        });
+
+        let token =
+            build_public_receipt_token_v1(&receipt, Some("genesis123"), Some("commit123"), None)
+                .unwrap();
+        assert_eq!(token.v, 1);
+        assert_eq!(token.r, "b3:r1");
+        assert_eq!(token.c, "b3:c1");
+        assert_eq!(token.g, "genesis123");
+        assert_eq!(token.k, "did:key:zTest#ed25519");
+        assert_eq!(token.alg, "ed25519");
+        assert_eq!(token.rc.as_deref(), Some("commit123"));
+        assert_eq!(token.bh.as_deref(), Some("b3:bh1"));
+
+        let link = build_public_receipt_link_v1("https://logline.world", "/r", &token).unwrap();
+        assert_eq!(link.model, PUBLIC_RECEIPT_MODEL_V1);
+        assert!(link.url.starts_with("https://logline.world/r#ubl:v1:"));
+    }
+
+    #[test]
+    fn public_receipt_link_v1_rejects_bad_origin() {
+        let payload = PublicReceiptTokenV1 {
+            v: 1,
+            r: "b3:r".into(),
+            c: "b3:c".into(),
+            g: "".into(),
+            k: "did:key:z#ed25519".into(),
+            alg: "ed25519".into(),
+            sig: "ed25519:abc".into(),
+            did: None,
+            rc: None,
+            bh: None,
+        };
+        let err = build_public_receipt_link_v1("logline.world", "/r", &payload).unwrap_err();
+        assert!(matches!(err, UrlError::InvalidFormat(_)));
     }
 }

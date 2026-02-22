@@ -1,4 +1,4 @@
-.PHONY: all build test fmt lint kat gate gate-prod clean check load-validate rollout-check prod-slice-canary docs-attest-keygen docs-attest-manifest docs-attest-sign docs-attest-verify
+.PHONY: all build test fmt lint kat gate gate-prod clean check load-validate docs-attest-keygen docs-attest-manifest docs-attest-sign docs-attest-verify bootstrap-core host-lockdown ops-maintenance forever-bootstrap workzone-cleanup
 
 all: build
 
@@ -31,18 +31,6 @@ gate-prod:
 load-validate:
 	cargo test -p ubl_chipstore --test load_validation -- --ignored --nocapture
 
-rollout-check:
-	bash scripts/rollout_p0_p1_check.sh \
-		--runtime-hash "$${RUNTIME_HASH:?set RUNTIME_HASH}" \
-		--allow-placeholder-signatures \
-		--report-file ./data/rollout_report.json
-
-prod-slice-canary:
-	bash scripts/production_slice_canary.sh \
-		--base-url "$${BASE_URL:-http://127.0.0.1:4000}" \
-		--iterations "$${ITERATIONS:-20}" \
-		--report-file ./data/production_slice_report.json
-
 docs-attest-keygen:
 	bash scripts/docs_attest.sh init-key \
 		--key-out "$${KEY_OUT:-$$HOME/.ubl-core/keys/docs_attest_ed25519.pem}" \
@@ -64,6 +52,19 @@ docs-attest-verify:
 	bash scripts/docs_attest.sh verify \
 		--manifest "$${MANIFEST_PATH:-./release-artifacts/docs/manifest.json}" \
 		--attestation "$${ATTEST_PATH:-./release-artifacts/docs/attestation.json}"
+
+bootstrap-core:
+	bash scripts/ubl_ops.sh bootstrap-core --env "$${FOREVER_ENV_FILE:-./ops/forever_bootstrap.env}"
+
+host-lockdown:
+	sudo bash scripts/ubl_ops.sh host-lockdown --env "$${FOREVER_ENV_FILE:-./ops/forever_bootstrap.env}"
+
+ops-maintenance:
+	bash scripts/ubl_ops.sh ops-maintenance --env "$${FOREVER_ENV_FILE:-./ops/forever_bootstrap.env}"
+
+forever-bootstrap: bootstrap-core
+
+workzone-cleanup: ops-maintenance
 
 clean:
 	cargo clean

@@ -108,7 +108,7 @@ Current priorities:
 
 | # | Task | Location | Notes |
 |---|---|---|---|
-| H4 | **P0→P1 rollout automation** | `ROLLOUT_P0_TO_P1.md` | ✅ Done. Added `scripts/rollout_p0_p1_check.sh` + `make rollout-check` preflight with runtime hash allowlist validation, activation_time lead-window checks, signature quorum checks, core type coverage checks, and explicit break-glass mode/reporting (`docs/ops/ROLLOUT_AUTOMATION.md`). |
+| H4 | **P0→P1 rollout automation** | `ROLLOUT_P0_TO_P1.md` | ✅ Done. Migrated to chip-native governance receipts/traces as canonical evidence, with break-glass preserved as operational emergency path and no external preflight script as production authority (`docs/ops/ROLLOUT_AUTOMATION.md`). |
 | H5 | **Newtype pattern** | All crates | ✅ Done. `ubl_types` crate with `Cid`, `Did`, `Kid`, `Nonce`, `ChipType`, `World` newtypes (24 tests). Migrated `StoredChip.cid`/`receipt_cid` → `TypedCid`, `ExecutionMetadata.executor_did` → `TypedDid`, `UnifiedReceipt` fields (`world`/`did`/`kid`/`nonce`/`receipt_cid`/`prev_receipt_cid`), `PipelineReceipt.body_cid` → `TypedCid`. Serde-transparent wire compat preserved. |
 | H6 | **Parse, Don't Validate** | Pipeline + chip types | ✅ Done. Pipeline now enforces typed request parse once (`@type/@id/@world` + body object), with stages consuming `ParsedChipRequest` instead of re-validating raw request bodies. |
 

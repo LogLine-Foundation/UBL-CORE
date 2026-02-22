@@ -15,6 +15,7 @@ fn all_error_codes() -> Vec<ErrorCode> {
         ErrorCode::KnockRawFloat,
         ErrorCode::KnockMalformedNum,
         ErrorCode::KnockNumericLiteralNotAllowed,
+        ErrorCode::KnockInputNormalization,
         ErrorCode::PolicyDenied,
         ErrorCode::InvalidChip,
         ErrorCode::DependencyMissing,
@@ -53,6 +54,7 @@ fn assert_exhaustive(code: ErrorCode) {
         | ErrorCode::KnockRawFloat
         | ErrorCode::KnockMalformedNum
         | ErrorCode::KnockNumericLiteralNotAllowed
+        | ErrorCode::KnockInputNormalization
         | ErrorCode::PolicyDenied
         | ErrorCode::InvalidChip
         | ErrorCode::DependencyMissing

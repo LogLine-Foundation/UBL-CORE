@@ -12,6 +12,7 @@
 //! 6. Required anchors: @type, @world
 //! 7. No raw floats (UNC-1 §3/§6: use @num atoms instead)
 //! 8. Strict `@num` atom validation (UNC-1 shape + field types)
+//! 9. Reject integer literals outside i64 range (to match NRF canonical encoder)
 
 use serde_json::Value;
 use std::collections::HashSet;
@@ -115,7 +116,8 @@ pub fn knock(bytes: &[u8]) -> Result<Value, KnockError> {
     knock_raw(bytes)?;
 
     // Parse JSON (also validates UTF-8 at serde level)
-    let mut value: Value = serde_json::from_slice(bytes).map_err(|_| KnockError::InvalidUtf8)?;
+    let mut value: Value = serde_json::from_slice(bytes)
+        .map_err(|e| KnockError::InputNormalization(format!("invalid JSON syntax: {}", e)))?;
 
     value = ubl_ai_nrf1::normalize_for_input(&value).map_err(map_normalization_error)?;
 
@@ -164,11 +166,17 @@ fn check_depth(value: &Value, depth: usize) -> Result<(), KnockError> {
 fn check_numeric_nodes(value: &Value, path: &str, require_unc1: bool) -> Result<(), KnockError> {
     match value {
         Value::Number(n) => {
-            if !n.is_i64() && !n.is_u64() {
+            if n.is_i64() {
+                if require_unc1 {
+                    return Err(KnockError::NumericLiteralNotAllowed(path.to_string()));
+                }
+            } else if n.is_u64() {
+                return Err(KnockError::InputNormalization(format!(
+                    "numeric literal out of i64 range at {}",
+                    path
+                )));
+            } else {
                 return Err(KnockError::RawFloat(format!("{} at {}", n, path)));
-            }
-            if require_unc1 {
-                return Err(KnockError::NumericLiteralNotAllowed(path.to_string()));
             }
         }
         Value::Array(arr) => {

@@ -34,3 +34,4 @@ sled_data/
 # Test artifacts
 /tmp/
 release-artifacts/
+artifacts/conformance/

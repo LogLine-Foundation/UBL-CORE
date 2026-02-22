@@ -277,9 +277,10 @@ pub struct UnifiedReceipt {
     pub t: String,
     /// Issuer DID
     pub did: TypedDid,
-    /// Subject DID (optional)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub subject: Option<String>,
+    /// Authorship DID resolved at KNOCK (optional).
+    /// Alias "subject" is accepted for backward compatibility.
+    #[serde(skip_serializing_if = "Option::is_none", alias = "subject")]
+    pub subject_did: Option<String>,
     /// Key ID
     pub kid: TypedKid,
     /// Anti-replay nonce
@@ -299,6 +300,10 @@ pub struct UnifiedReceipt {
     pub receipt_cid: TypedCid,
     /// Ed25519 JWS detached signature (empty until finalized)
     pub sig: String,
+
+    /// Content address of inbound envelope/knock payload.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub knock_cid: Option<TypedCid>,
 
     /// Runtime that produced this receipt (binary hash, version, env)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -321,7 +326,7 @@ impl UnifiedReceipt {
             v: 1,
             t,
             did: TypedDid::new_unchecked(did),
-            subject: None,
+            subject_did: None,
             kid: TypedKid::new_unchecked(kid),
             nonce: TypedNonce::new_unchecked(nonce),
             stages: Vec::new(),
@@ -330,6 +335,7 @@ impl UnifiedReceipt {
             prev_receipt_cid: None,
             receipt_cid: TypedCid::new_unchecked(""),
             sig: String::new(),
+            knock_cid: None,
             rt: None,
         }
     }
@@ -337,6 +343,18 @@ impl UnifiedReceipt {
     /// Attach runtime info to this receipt.
     pub fn with_runtime_info(mut self, rt: RuntimeInfo) -> Self {
         self.rt = Some(rt);
+        self
+    }
+
+    /// Attach subject/authorship DID.
+    pub fn with_subject_did(mut self, subject_did: Option<String>) -> Self {
+        self.subject_did = subject_did;
+        self
+    }
+
+    /// Attach knock envelope CID.
+    pub fn with_knock_cid(mut self, knock_cid: Option<&str>) -> Self {
+        self.knock_cid = knock_cid.map(TypedCid::new_unchecked);
         self
     }
 

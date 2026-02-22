@@ -36,6 +36,9 @@ use ubl_runtime::manifest::GateManifest;
 use ubl_runtime::outbox_dispatcher::OutboxDispatcher;
 use ubl_runtime::policy_loader::InMemoryPolicyStorage;
 use ubl_runtime::rate_limit::{CanonRateLimiter, RateLimitConfig, RateLimitResult};
+use ubl_runtime::rich_url::{
+    build_public_receipt_link_v1, build_public_receipt_token_v1, PublicReceiptLink,
+};
 use ubl_runtime::UblPipeline;
 
 mod metrics;
@@ -52,6 +55,11 @@ struct AppState {
     mcp_token_rate_limiter: Arc<McpTokenRateLimiter>,
     durable_store: Option<Arc<DurableStore>>,
     event_store: Option<Arc<EventStore>>,
+    public_receipt_origin: String,
+    public_receipt_path: String,
+    genesis_pubkey_sha256: Option<String>,
+    release_commit: Option<String>,
+    gate_binary_sha256: Option<String>,
 }
 
 #[derive(Clone)]
@@ -316,6 +324,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let manifest = Arc::new(GateManifest::default());
     let mcp_token_rate_limiter = Arc::new(McpTokenRateLimiter::from_env());
+    let public_receipt_origin = public_receipt_origin_from_env();
+    let public_receipt_path = public_receipt_path_from_env();
+    let genesis_pubkey_sha256 = env_opt_trim("UBL_GENESIS_PUBKEY_SHA256");
+    let release_commit = env_opt_trim("UBL_RELEASE_COMMIT");
+    let gate_binary_sha256 = env_opt_trim("UBL_GATE_BINARY_SHA256");
 
     let state = AppState {
         pipeline,
@@ -329,6 +342,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         mcp_token_rate_limiter,
         durable_store,
         event_store,
+        public_receipt_origin,
+        public_receipt_path,
+        genesis_pubkey_sha256,
+        release_commit,
+        gate_binary_sha256,
     };
 
     let app = build_router(state);
@@ -354,6 +372,35 @@ fn env_bool(name: &str, default: bool) -> bool {
         .ok()
         .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes" | "on"))
         .unwrap_or(default)
+}
+
+fn env_opt_trim(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn public_receipt_origin_from_env() -> String {
+    if let Some(origin) = env_opt_trim("UBL_PUBLIC_RECEIPT_ORIGIN") {
+        return origin;
+    }
+    if let Some(domain) = env_opt_trim("UBL_RICH_URL_DOMAIN") {
+        let d = domain
+            .trim_start_matches("https://")
+            .trim_start_matches("http://");
+        return format!("https://{}", d);
+    }
+    "https://logline.world".to_string()
+}
+
+fn public_receipt_path_from_env() -> String {
+    let path = env_opt_trim("UBL_PUBLIC_RECEIPT_PATH").unwrap_or_else(|| "/r".to_string());
+    if path.starts_with('/') {
+        path
+    } else {
+        format!("/{}", path)
+    }
 }
 
 fn load_canon_rate_limiter() -> Option<Arc<CanonRateLimiter>> {
@@ -421,23 +468,124 @@ fn verify_receipt_auth_chain(receipt_cid: &str, receipt_json: &Value) -> Result<
     Ok(())
 }
 
-async fn submit_chip_bytes(state: &AppState, body: &[u8]) -> (StatusCode, HeaderMap, Value) {
+fn build_public_receipt_link(state: &AppState, receipt_json: &Value) -> Option<PublicReceiptLink> {
+    let token = match build_public_receipt_token_v1(
+        receipt_json,
+        state.genesis_pubkey_sha256.as_deref(),
+        state.release_commit.as_deref(),
+        state.gate_binary_sha256.as_deref(),
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            warn!(error = %e, "failed to build public receipt token");
+            return None;
+        }
+    };
+
+    match build_public_receipt_link_v1(
+        &state.public_receipt_origin,
+        &state.public_receipt_path,
+        &token,
+    ) {
+        Ok(link) => Some(link),
+        Err(e) => {
+            warn!(error = %e, "failed to build public receipt link");
+            None
+        }
+    }
+}
+
+fn actor_hint_from_headers(headers: Option<&HeaderMap>) -> ubl_runtime::authorship::ActorHint {
+    let mut hint = ubl_runtime::authorship::ActorHint::default();
+    let Some(h) = headers else {
+        return hint;
+    };
+
+    if let Some(forwarded_for) = h
+        .get("CF-Connecting-IP")
+        .or_else(|| h.get("X-Forwarded-For"))
+        .and_then(|v| v.to_str().ok())
+    {
+        let ip = forwarded_for.split(',').next().unwrap_or_default().trim();
+        if !ip.is_empty() {
+            let parts: Vec<&str> = ip.split('.').collect();
+            if parts.len() == 4 {
+                hint.ip_prefix = Some(format!("{}.{}.{}.*", parts[0], parts[1], parts[2]));
+            } else {
+                hint.ip_prefix = Some(ip.to_string());
+            }
+        }
+    }
+
+    if let Some(ua) = h.get(header::USER_AGENT).and_then(|v| v.to_str().ok()) {
+        let ua_hash = blake3::hash(ua.as_bytes());
+        hint.user_agent_hash = Some(format!("b3:{}", hex::encode(ua_hash.as_bytes())));
+    }
+
+    hint
+}
+
+fn knock_reason_code(err: &ubl_runtime::knock::KnockError) -> String {
+    let msg = err.to_string();
+    msg.split(':').next().unwrap_or("KNOCK-000").to_string()
+}
+
+async fn submit_chip_bytes(
+    state: &AppState,
+    headers: Option<&HeaderMap>,
+    body: &[u8],
+) -> (StatusCode, HeaderMap, Value) {
     metrics::inc_chips_total();
     let t0 = std::time::Instant::now();
+    let knock_cid = ubl_runtime::authorship::knock_cid_from_bytes(body);
+    let actor_hint = actor_hint_from_headers(headers);
 
     let value = match ubl_runtime::knock::knock(body) {
         Ok(v) => v,
         Err(e) => {
             metrics::observe_pipeline_seconds(t0.elapsed().as_secs_f64());
-            let ubl_err = UblError::from_pipeline_error(
-                &ubl_runtime::pipeline::PipelineError::Knock(e.to_string()),
-            );
-            let code_str = format!("{:?}", ubl_err.code);
+            let reason_code = knock_reason_code(&e);
+            let reason_msg = e.to_string();
+            let subject_did = ubl_runtime::authorship::resolve_subject_did(None, Some(&actor_hint));
             metrics::inc_knock_reject();
-            metrics::inc_error(&code_str);
-            let status =
-                StatusCode::from_u16(ubl_err.code.http_status()).unwrap_or(StatusCode::BAD_REQUEST);
-            return (status, HeaderMap::new(), ubl_err.to_json());
+            metrics::inc_error("KNOCK_REJECTED");
+
+            match state
+                .pipeline
+                .process_knock_rejection(&knock_cid, &reason_code, &reason_msg, Some(subject_did))
+                .await
+            {
+                Ok(result) => {
+                    let receipt_json = result.receipt.to_json().unwrap_or(json!({}));
+                    let public_receipt = build_public_receipt_link(state, &receipt_json);
+                    let receipt_url = public_receipt.as_ref().map(|p| p.url.clone());
+                    let status = StatusCode::UNPROCESSABLE_ENTITY;
+                    return (
+                        status,
+                        HeaderMap::new(),
+                        json!({
+                            "@type": "ubl/error",
+                            "code": "KNOCK_REJECTED",
+                            "message": reason_msg,
+                            "receipt_cid": result.receipt.receipt_cid.as_str(),
+                            "receipt_url": receipt_url,
+                            "receipt_public": public_receipt,
+                            "chain": result.chain,
+                            "receipt": receipt_json,
+                            "subject_did": result.receipt.subject_did,
+                            "knock_cid": result.receipt.knock_cid,
+                            "decision": "Deny",
+                            "status": "denied",
+                        }),
+                    );
+                }
+                Err(process_err) => {
+                    let ubl_err = UblError::from_pipeline_error(&process_err);
+                    let status = StatusCode::from_u16(ubl_err.code.http_status())
+                        .unwrap_or(StatusCode::BAD_REQUEST);
+                    return (status, HeaderMap::new(), ubl_err.to_json());
+                }
+            }
         }
     };
 
@@ -477,8 +625,14 @@ async fn submit_chip_bytes(state: &AppState, body: &[u8]) -> (StatusCode, Header
         parents: vec![],
         operation: Some("create".to_string()),
     };
+    let subject_did =
+        ubl_runtime::authorship::resolve_subject_did(Some(&request.body), Some(&actor_hint));
+    let ctx = ubl_runtime::pipeline::AuthorshipContext {
+        subject_did_hint: Some(subject_did),
+        knock_cid: Some(knock_cid.clone()),
+    };
 
-    match state.pipeline.process_chip(request).await {
+    match state.pipeline.process_chip_with_context(request, ctx).await {
         Ok(result) => {
             metrics::observe_pipeline_seconds(t0.elapsed().as_secs_f64());
             let decision_str = format!("{:?}", result.decision);
@@ -488,12 +642,14 @@ async fn submit_chip_bytes(state: &AppState, body: &[u8]) -> (StatusCode, Header
                 metrics::inc_deny();
             }
             let receipt_json = result.receipt.to_json().unwrap_or(json!({}));
+            let public_receipt = build_public_receipt_link(state, &receipt_json);
             let mut headers = HeaderMap::new();
             if result.replayed {
                 metrics::inc_idempotency_hit();
                 metrics::inc_idempotency_replay_block();
                 headers.insert("X-UBL-Replay", "true".parse().unwrap());
             }
+            let receipt_url = public_receipt.as_ref().map(|p| p.url.clone());
             (
                 StatusCode::OK,
                 headers,
@@ -502,7 +658,11 @@ async fn submit_chip_bytes(state: &AppState, body: &[u8]) -> (StatusCode, Header
                     "status": "success",
                     "decision": decision_str,
                     "receipt_cid": result.receipt.receipt_cid,
+                    "receipt_url": receipt_url,
+                    "receipt_public": public_receipt,
                     "chain": result.chain,
+                    "subject_did": result.receipt.subject_did,
+                    "knock_cid": result.receipt.knock_cid,
                     "receipt": receipt_json,
                     "replayed": result.replayed,
                 }),
@@ -2486,7 +2646,7 @@ async fn registry_kat_test(
         }
     };
 
-    let (status, _headers, payload) = submit_chip_bytes(&state, &body).await;
+    let (status, _headers, payload) = submit_chip_bytes(&state, None, &body).await;
     let actual_decision = payload
         .get("decision")
         .and_then(|v| v.as_str())
@@ -2881,10 +3041,28 @@ fn to_hub_event(event: &ReceiptEvent) -> Value {
         "cid": event.receipt_cid.clone(),
         "decision": decision,
         "code": code,
+        "knock_cid": event.knock_cid.clone(),
     });
-    if receipt.get("code").is_some_and(Value::is_null) {
-        if let Some(obj) = receipt.as_object_mut() {
+    if let Some(obj) = receipt.as_object_mut() {
+        if obj.get("code").is_some_and(Value::is_null) {
             obj.remove("code");
+        }
+        if obj.get("knock_cid").is_some_and(Value::is_null) {
+            obj.remove("knock_cid");
+        }
+    }
+
+    let mut actor = json!({
+        "kid": event.actor.clone(),
+        "did": event.subject_did.clone(),
+        "cap": cap,
+    });
+    if let Some(obj) = actor.as_object_mut() {
+        if obj.get("did").is_some_and(Value::is_null) {
+            obj.remove("did");
+        }
+        if obj.get("cap").is_some_and(Value::is_null) {
+            obj.remove("cap");
         }
     }
 
@@ -2907,10 +3085,7 @@ fn to_hub_event(event: &ReceiptEvent) -> Value {
             "fuel": event.fuel_used,
             "mem_kb": Value::Null,
         },
-        "actor": {
-            "kid": event.actor.clone(),
-            "cap": cap,
-        },
+        "actor": actor,
         "artifacts": event.artifact_cids.clone(),
         "runtime": {
             "binary_hash": event.binary_hash.clone(),
@@ -3031,6 +3206,7 @@ fn build_router(state: AppState) -> Router {
         .route("/v1/chips/:cid", get(get_chip))
         .route("/v1/cas/:cid", get(get_chip))
         .route("/v1/receipts/:cid", get(get_receipt))
+        .route("/v1/receipts/:cid/url", get(get_receipt_public_url))
         .route("/v1/receipts/:cid/trace", get(get_receipt_trace))
         .route("/v1/receipts/:cid/narrate", get(narrate_receipt))
         .route(
@@ -3082,8 +3258,12 @@ async fn get_runtime_attestation(State(state): State<AppState>) -> (StatusCode, 
 /// Idempotent: if the chip was already processed (same @type/@ver/@world/@id),
 /// returns the cached result with `X-UBL-Replay: true` header and `"replayed": true`
 /// in the response body. No re-execution occurs.
-async fn create_chip(State(state): State<AppState>, body: Bytes) -> impl IntoResponse {
-    let (status, headers, payload) = submit_chip_bytes(&state, &body).await;
+async fn create_chip(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> impl IntoResponse {
+    let (status, headers, payload) = submit_chip_bytes(&state, Some(&headers), &body).await;
     (status, headers, Json(payload))
 }
 
@@ -3334,6 +3514,77 @@ async fn get_receipt(
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             HeaderMap::new(),
+            Json(json!({
+                "@type": "ubl/error",
+                "code": "INTERNAL_ERROR",
+                "message": format!("Receipt fetch failed: {}", e),
+            })),
+        ),
+    }
+}
+
+/// GET /v1/receipts/:cid/url — derive canonical public rich URL from persisted receipt.
+async fn get_receipt_public_url(
+    State(state): State<AppState>,
+    Path(cid): Path<String>,
+) -> impl IntoResponse {
+    if !cid.starts_with("b3:") {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(
+                json!({"@type": "ubl/error", "code": "INVALID_CID", "message": "CID must start with b3:"}),
+            ),
+        );
+    }
+
+    let Some(store) = state.durable_store.as_ref() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "@type": "ubl/error",
+                "code": "UNAVAILABLE",
+                "message": "Receipt store unavailable: enable SQLite durable store",
+            })),
+        );
+    };
+
+    match store.get_receipt(&cid) {
+        Ok(Some(receipt)) => {
+            if let Err(ubl_err) = verify_receipt_auth_chain(&cid, &receipt) {
+                return (
+                    StatusCode::from_u16(ubl_err.code.http_status())
+                        .unwrap_or(StatusCode::UNPROCESSABLE_ENTITY),
+                    Json(ubl_err.to_json()),
+                );
+            }
+            match build_public_receipt_link(&state, &receipt) {
+                Some(link) => (
+                    StatusCode::OK,
+                    Json(json!({
+                        "@type":"ubl/receipt.url",
+                        "receipt_cid": cid,
+                        "receipt_url": link.url,
+                        "receipt_public": link,
+                    })),
+                ),
+                None => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "@type":"ubl/error",
+                        "code":"INTERNAL_ERROR",
+                        "message":"failed to derive canonical public receipt URL",
+                    })),
+                ),
+            }
+        }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(
+                json!({"@type": "ubl/error", "code": "NOT_FOUND", "message": format!("Receipt {} not found", cid)}),
+            ),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({
                 "@type": "ubl/error",
                 "code": "INTERNAL_ERROR",
@@ -4124,7 +4375,7 @@ async fn dispatch_tool_call(
         "ubl.deliver" => {
             let chip = arguments.get("chip").cloned().unwrap_or(json!({}));
             let bytes = serde_json::to_vec(&chip).unwrap_or_default();
-            let (status, _headers, payload) = submit_chip_bytes(state, &bytes).await;
+            let (status, _headers, payload) = submit_chip_bytes(state, None, &bytes).await;
             if status.is_success() {
                 (
                     StatusCode::OK,
@@ -4662,6 +4913,11 @@ mod tests {
             mcp_token_rate_limiter: Arc::new(McpTokenRateLimiter::from_env()),
             durable_store: None,
             event_store: None,
+            public_receipt_origin: "https://logline.world".to_string(),
+            public_receipt_path: "/r".to_string(),
+            genesis_pubkey_sha256: Some("genesis-test-anchor".to_string()),
+            release_commit: Some("test-commit".to_string()),
+            gate_binary_sha256: Some("b3:test-runtime-hash".to_string()),
         }
     }
 
@@ -4784,6 +5040,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn chips_endpoint_invalid_json_emits_knock_deny_receipt() {
+        let app = build_router(test_state(None));
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/chips")
+            .header("content-type", "application/json")
+            .body(Body::from("{invalid"))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["@type"], "ubl/error");
+        assert_eq!(payload["code"], "KNOCK_REJECTED");
+        assert!(payload["receipt_cid"]
+            .as_str()
+            .map(|s| s.starts_with("b3:"))
+            .unwrap_or(false));
+        assert_eq!(payload["receipt"]["@type"], "ubl/knock.deny.v1");
+        assert_eq!(payload["receipt"]["decision"], "Deny");
+        assert!(payload["receipt"]["knock_cid"]
+            .as_str()
+            .map(|s| s.starts_with("b3:"))
+            .unwrap_or(false));
+    }
+
+    #[tokio::test]
     async fn cas_alias_route_is_read_only_and_reachable() {
         let app = build_router(test_state(None));
         let req = Request::builder()
@@ -4819,6 +5103,8 @@ mod tests {
         let v1: Value = serde_json::from_slice(&body1).unwrap();
         assert_eq!(v1["replayed"], Value::Bool(false));
         let cid1 = v1["receipt_cid"].as_str().unwrap().to_string();
+        let receipt_url_1 = v1["receipt_url"].as_str().unwrap_or("");
+        assert!(receipt_url_1.starts_with("https://logline.world/r#ubl:v1:"));
 
         let req2 = Request::builder()
             .method(Method::POST)
@@ -4838,6 +5124,8 @@ mod tests {
         let v2: Value = serde_json::from_slice(&body2).unwrap();
         assert_eq!(v2["replayed"], Value::Bool(true));
         let cid2 = v2["receipt_cid"].as_str().unwrap().to_string();
+        let receipt_url_2 = v2["receipt_url"].as_str().unwrap_or("");
+        assert_eq!(receipt_url_1, receipt_url_2);
         assert_eq!(cid1, cid2);
     }
 
@@ -4891,6 +5179,28 @@ mod tests {
         let v: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(v["@type"], "ubl/receipt");
         assert_eq!(v["receipt_cid"], receipt_cid);
+    }
+
+    #[tokio::test]
+    async fn receipt_public_url_endpoint_returns_canonical_link() {
+        let (receipt_cid, receipt_json) = make_unified_receipt_json(false);
+        let app = build_router(test_state_with_receipt_store(&receipt_cid, receipt_json));
+
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri(format!("/v1/receipts/{}/url", receipt_cid))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let v: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(v["@type"], "ubl/receipt.url");
+        assert_eq!(v["receipt_cid"], receipt_cid);
+        let receipt_url = v["receipt_url"].as_str().unwrap_or("");
+        assert!(receipt_url.starts_with("https://logline.world/r#ubl:v1:"));
+        assert_eq!(v["receipt_public"]["model"], "ubl:v1");
     }
 
     #[tokio::test]
@@ -5141,6 +5451,8 @@ mod tests {
             build_meta: Some(json!({"git":"abc123"})),
             world: Some("a/acme/t/prod".to_string()),
             actor: Some("did:key:z1#k1".to_string()),
+            subject_did: Some("did:ubl:anon:b3:test".to_string()),
+            knock_cid: Some("b3:knock".to_string()),
             latency_ms: Some(12),
         };
 

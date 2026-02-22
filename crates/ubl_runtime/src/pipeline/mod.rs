@@ -130,6 +130,15 @@ pub struct ChipRequest {
     pub operation: Option<String>,
 }
 
+/// Optional authorship context resolved by transport/gateway before pipeline execution.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AuthorshipContext {
+    /// Resolved caller DID (authorship identity), if already available.
+    pub subject_did_hint: Option<String>,
+    /// Content-addressed knock/envelope CID.
+    pub knock_cid: Option<String>,
+}
+
 /// Result from the complete pipeline
 #[derive(Debug, Clone)]
 pub struct PipelineResult {

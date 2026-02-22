@@ -32,6 +32,8 @@ pub enum ErrorCode {
     KnockMalformedNum,
     #[serde(rename = "KNOCK_NUMERIC_LITERAL_NOT_ALLOWED")]
     KnockNumericLiteralNotAllowed,
+    #[serde(rename = "KNOCK_INPUT_NORMALIZATION")]
+    KnockInputNormalization,
 
     // Pipeline errors (produce DENY receipt)
     #[serde(rename = "POLICY_DENIED")]
@@ -102,7 +104,8 @@ impl ErrorCode {
             | Self::KnockNotObject
             | Self::KnockRawFloat
             | Self::KnockMalformedNum
-            | Self::KnockNumericLiteralNotAllowed => 400,
+            | Self::KnockNumericLiteralNotAllowed
+            | Self::KnockInputNormalization => 400,
 
             Self::PolicyDenied => 403,
             Self::DependencyMissing => 409,
@@ -145,6 +148,7 @@ impl ErrorCode {
             | Self::KnockRawFloat
             | Self::KnockMalformedNum
             | Self::KnockNumericLiteralNotAllowed
+            | Self::KnockInputNormalization
             | Self::InvalidChip
             | Self::CanonError
             | Self::FuelExhausted
@@ -200,6 +204,7 @@ impl ErrorCode {
                 | Self::KnockRawFloat
                 | Self::KnockMalformedNum
                 | Self::KnockNumericLiteralNotAllowed
+                | Self::KnockInputNormalization
                 | Self::Unauthorized
                 | Self::NotFound
                 | Self::TooManyRequests
@@ -313,6 +318,8 @@ fn classify_knock_error(msg: &str) -> ErrorCode {
         ErrorCode::KnockMalformedNum
     } else if msg.contains("KNOCK-010") {
         ErrorCode::KnockNumericLiteralNotAllowed
+    } else if msg.contains("KNOCK-011") {
+        ErrorCode::KnockInputNormalization
     } else {
         ErrorCode::KnockInvalidUtf8 // fallback
     }
@@ -391,6 +398,7 @@ mod tests {
             ErrorCode::KnockRawFloat,
             ErrorCode::KnockMalformedNum,
             ErrorCode::KnockNumericLiteralNotAllowed,
+            ErrorCode::KnockInputNormalization,
         ];
         for code in &codes {
             assert_eq!(code.http_status(), 400, "{:?} should be 400", code);
@@ -419,6 +427,17 @@ mod tests {
             PipelineError::Knock("KNOCK-009: malformed @num atom: $.amount missing m".to_string());
         let ubl_err = UblError::from_pipeline_error(&err);
         assert_eq!(ubl_err.code, ErrorCode::KnockMalformedNum);
+        assert_eq!(ubl_err.code.http_status(), 400);
+        assert!(!ubl_err.code.produces_receipt());
+    }
+
+    #[test]
+    fn knock_input_normalization_maps_to_400() {
+        let err = PipelineError::Knock(
+            "KNOCK-011: input normalization failed: invalid JSON syntax".to_string(),
+        );
+        let ubl_err = UblError::from_pipeline_error(&err);
+        assert_eq!(ubl_err.code, ErrorCode::KnockInputNormalization);
         assert_eq!(ubl_err.code.http_status(), 400);
         assert!(!ubl_err.code.produces_receipt());
     }

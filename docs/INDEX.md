@@ -25,6 +25,14 @@ This is the entry point for all project documentation.
 | Error taxonomy | `crates/ubl_runtime/src/error_response.rs` | Runtime | Active |
 | Crypto trust model | `SECURITY.md` | Security | Active |
 | Docs attestation flow | `docs/security/DOC_ATTESTATION.md` | Security | Active |
+| Forever host bootstrap runbook | `docs/ops/FOREVER_BOOTSTRAP.md` | Ops + Security | Active |
+| Cloudflare edge baseline | `docs/ops/CLOUDFLARE_EDGE_BASELINE.md` | Ops + Security | Active |
+| Cloudflare tunnel go-live checklist | `docs/ops/CLOUDFLARE_TUNNEL_GO_LIVE.md` | Ops + Security | Active |
+| Host lockdown and cleanup | `docs/ops/HOST_LOCKDOWN_AND_CLEANUP.md` | Ops + Security | Active |
+| Key rotation plan | `docs/key_rotation_plan.md` | Security | Active |
+| Offline receipt verification model | `docs/ops/OFFLINE_RECEIPT_VERIFICATION.md` | Core Runtime + CLI | Planned |
+| Incident postmortem template | `ops/postmortem_template.md` | Ops + Security | Active |
+| Human continuity policy | `ops/continuity_policy.md` | Ops + Security | Draft |
 | Release gates | `docs/lifecycle/RELEASE_READINESS.md` | Core Runtime + Ops | Active |
 | Change history | `docs/changelog/CHANGELOG.md` | Repo Maintainer | Active |
 | OSS scope and boundary | `docs/oss/OPEN_SOURCE_SCOPE.md` | Repo Maintainer | Active |

@@ -28,3 +28,14 @@ Reference contracts are now source-of-truth artifacts exported or defined by Rus
 - JSON Schema contract: `schemas/unc-1.schema.json`
 - Canon spec narrative: `docs/canon/UNC-1.md`
 - VM numeric opcodes: `docs/vm/OPCODES_NUM.md`
+
+## Conformance
+
+- Official suite runner: `scripts/conformance_suite.sh`
+- CI artifact (per PR): `conformance-report` (JSON + Markdown + rule logs)
+- Primary contract vectors:
+  - `crates/ubl_runtime/tests/knock_vector_matrix.rs`
+  - `crates/rb_vm/tests/rho_contract_vectors.rs`
+  - `crates/ubl_ai_nrf1/tests/rho_vectors.rs`
+  - `crates/ubl_ai_nrf1/tests/golden_vectors.rs`
+  - `crates/ubl_runtime/tests/canon_guardrails.rs`

@@ -6,6 +6,8 @@ impl UblPipeline {
     pub async fn process_raw(&self, bytes: &[u8]) -> Result<PipelineResult, PipelineError> {
         // Stage 0: KNOCK
         let value = crate::knock::knock(bytes).map_err(|e| PipelineError::Knock(e.to_string()))?;
+        let knock_cid = crate::authorship::knock_cid_from_bytes(bytes);
+        let subject_did = crate::authorship::resolve_subject_did(Some(&value), None);
 
         let chip_type = value["@type"].as_str().unwrap_or("").to_string();
         let request = ChipRequest {
@@ -15,7 +17,14 @@ impl UblPipeline {
             operation: Some("create".to_string()),
         };
 
-        self.process_chip(request).await
+        self.process_chip_with_context(
+            request,
+            AuthorshipContext {
+                subject_did_hint: Some(subject_did),
+                knock_cid: Some(knock_cid),
+            },
+        )
+        .await
     }
 
     /// Process a chip request through the WA→TR→WF pipeline.
@@ -26,6 +35,16 @@ impl UblPipeline {
     pub async fn process_chip(
         &self,
         request: ChipRequest,
+    ) -> Result<PipelineResult, PipelineError> {
+        self.process_chip_with_context(request, AuthorshipContext::default())
+            .await
+    }
+
+    /// Process a chip request with transport-resolved authorship context.
+    pub async fn process_chip_with_context(
+        &self,
+        request: ChipRequest,
+        authorship_ctx: AuthorshipContext,
     ) -> Result<PipelineResult, PipelineError> {
         let pipeline_start = std::time::Instant::now();
         let parsed_request = ParsedChipRequest::parse(&request)?;
@@ -84,6 +103,12 @@ impl UblPipeline {
         // `@world` and `@type` already parsed/validated above.
         let world = parsed_request.world;
         let nonce = Self::generate_nonce();
+        let subject_did = authorship_ctx.subject_did_hint.clone().unwrap_or_else(|| {
+            crate::authorship::resolve_subject_did(Some(parsed_request.body()), None)
+        });
+        let knock_cid = authorship_ctx
+            .knock_cid
+            .unwrap_or_else(|| crate::authorship::knock_cid_from_value(parsed_request.body()));
 
         // GAP-6: cross-restart nonce tracking (24h TTL) when SQLite is enabled.
         // The in-memory guard is the fast path; SQLite adds cross-restart durability.
@@ -110,7 +135,9 @@ impl UblPipeline {
 
         // Create the unified receipt — it evolves through each stage
         let mut receipt = UnifiedReceipt::new(world, &self.did, &self.kid, &nonce)
-            .with_runtime_info((*self.runtime_info).clone());
+            .with_runtime_info((*self.runtime_info).clone())
+            .with_subject_did(Some(subject_did.clone()))
+            .with_knock_cid(Some(&knock_cid));
 
         // Stage 1: WA (Write-Ahead)
         let wa_start = std::time::Instant::now();
@@ -149,6 +176,8 @@ impl UblPipeline {
                     binary_hash: Some(self.runtime_info.binary_hash.clone()),
                     build_meta: serde_json::to_value(&self.runtime_info.build).ok(),
                     actor: Some(self.did.clone()),
+                    subject_did: Some(subject_did.clone()),
+                    knock_cid: Some(knock_cid.clone()),
                 },
             ))
             .await
@@ -260,6 +289,8 @@ impl UblPipeline {
                         binary_hash: Some(self.runtime_info.binary_hash.clone()),
                         build_meta: serde_json::to_value(&self.runtime_info.build).ok(),
                         actor: Some(self.did.clone()),
+                        subject_did: Some(subject_did.clone()),
+                        knock_cid: Some(knock_cid.clone()),
                     },
                 ))
                 .await
@@ -342,6 +373,8 @@ impl UblPipeline {
                     binary_hash: Some(self.runtime_info.binary_hash.clone()),
                     build_meta: serde_json::to_value(&self.runtime_info.build).ok(),
                     actor: Some(self.did.clone()),
+                    subject_did: Some(subject_did.clone()),
+                    knock_cid: Some(knock_cid.clone()),
                 },
             ))
             .await
@@ -403,6 +436,8 @@ impl UblPipeline {
                     binary_hash: Some(self.runtime_info.binary_hash.clone()),
                     build_meta: serde_json::to_value(&self.runtime_info.build).ok(),
                     actor: Some(self.did.clone()),
+                    subject_did: Some(subject_did.clone()),
+                    knock_cid: Some(knock_cid.clone()),
                 },
             ))
             .await
@@ -567,6 +602,99 @@ impl UblPipeline {
             "pipeline completed"
         );
 
+        Ok(result)
+    }
+
+    /// Produce a signed, persisted DENY receipt for envelopes rejected at KNOCK.
+    pub async fn process_knock_rejection(
+        &self,
+        knock_cid: &str,
+        reason_code: &str,
+        reason: &str,
+        subject_did_hint: Option<String>,
+    ) -> Result<PipelineResult, PipelineError> {
+        let world = "ubl/system";
+        let nonce = Self::generate_nonce();
+        let subject_did =
+            subject_did_hint.unwrap_or_else(|| crate::authorship::resolve_subject_did(None, None));
+
+        let mut receipt = UnifiedReceipt::new(world, &self.did, &self.kid, &nonce)
+            .with_runtime_info((*self.runtime_info).clone())
+            .with_subject_did(Some(subject_did.clone()))
+            .with_knock_cid(Some(knock_cid));
+        receipt.receipt_type = "ubl/knock.deny.v1".to_string();
+
+        receipt
+            .append_stage(StageExecution {
+                stage: PipelineStage::Knock,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                input_cid: knock_cid.to_string(),
+                output_cid: Some(knock_cid.to_string()),
+                fuel_used: None,
+                policy_trace: vec![],
+                vm_sig: None,
+                vm_sig_payload_cid: None,
+                auth_token: String::new(),
+                duration_ms: 0,
+            })
+            .map_err(|e| PipelineError::Internal(format!("Receipt KNOCK(DENY): {}", e)))?;
+
+        if let Some(obj) = receipt.effects.as_object_mut() {
+            obj.insert(
+                "reason_code".to_string(),
+                serde_json::Value::String(reason_code.to_string()),
+            );
+            obj.insert(
+                "knock_cid".to_string(),
+                serde_json::Value::String(knock_cid.to_string()),
+            );
+        }
+        receipt.deny(reason);
+
+        receipt
+            .append_stage(StageExecution {
+                stage: PipelineStage::WriteFinished,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                input_cid: knock_cid.to_string(),
+                output_cid: None,
+                fuel_used: None,
+                policy_trace: vec![],
+                vm_sig: None,
+                vm_sig_payload_cid: None,
+                auth_token: String::new(),
+                duration_ms: 0,
+            })
+            .map_err(|e| PipelineError::Internal(format!("Receipt WF(KNOCK_DENY): {}", e)))?;
+        receipt
+            .finalize_and_sign(&self.signing_key, CryptoMode::from_env())
+            .map_err(|e| PipelineError::SignError(format!("WF(KNOCK_DENY) sign failed: {}", e)))?;
+
+        let receipt_json = receipt.to_json().unwrap_or_default();
+        if let Err(e) = self
+            .event_bus
+            .publish_stage_event(crate::event_bus::ReceiptEvent::from(&receipt))
+            .await
+        {
+            warn!(error = %e, "Failed to publish knock deny receipt event");
+        }
+
+        let result = PipelineResult {
+            final_receipt: PipelineReceipt {
+                body_cid: ubl_types::Cid::new_unchecked(receipt.receipt_cid.as_str()),
+                receipt_type: "ubl/wf".to_string(),
+                body: receipt_json,
+            },
+            chain: vec![
+                knock_cid.to_string(),
+                "no-tr".to_string(),
+                receipt.receipt_cid.as_str().to_string(),
+            ],
+            decision: Decision::Deny,
+            receipt,
+            replayed: false,
+        };
+
+        self.persist_final_result(None, world, &result).await?;
         Ok(result)
     }
 
