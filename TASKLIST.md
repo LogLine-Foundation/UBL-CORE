@@ -32,6 +32,7 @@ Previous tasklist archived at: `docs/archive/2026-02/TASKLIST_MASTER_ARCHIVE_202
 - [ ] Define production topology with two UBL copies:
   - control + ingestion plane
   - data/serving plane
+- [ ] Formalize Episode 1 protocol as normative contract (`docs/ops/EPISODE_1_PROTOCOL.md`).
 - [ ] Replace old canary concept with dual-plane validation protocol.
 - [ ] Define control-plane responsibilities (ingest, governance, policy transitions, orchestration).
 - [ ] Define data-plane responsibilities (query/read APIs, receipts retrieval, CAS delivery, performance isolation).
@@ -89,6 +90,7 @@ Previous tasklist archived at: `docs/archive/2026-02/TASKLIST_MASTER_ARCHIVE_202
 - [ ] Execute full bootstrap rehearsal from clean state.
 - [ ] Validate all generated artifacts, receipts, and witnesses.
 - [ ] Validate dual-plane behavior and deterministic sync/replication checks.
+- [ ] Run Episode 1 Small/Big acceptance test using the 12-line checklist in `docs/ops/EPISODE_1_PROTOCOL.md`.
 - [ ] Run incident drill and recovery simulation.
 - [ ] Capture rehearsal evidence package for go/no-go decision.
 

@@ -34,6 +34,8 @@ This is the entry point for all project documentation.
 | Key rotation plan | `docs/key_rotation_plan.md` | Security | Active |
 | Offline receipt verification model | `docs/ops/OFFLINE_RECEIPT_VERIFICATION.md` | Core Runtime + CLI | Planned |
 | Final pragmatic position (LAB512 + Episode1) | `docs/ops/BOOTSTRAP_FINAL_TEXT.md` | Core Runtime + Ops | Active |
+| Episode 1 protocol (Small/Big) | `docs/ops/EPISODE_1_PROTOCOL.md` | Core Runtime + Ops | Active |
+| Episode execution template | `docs/ops/EPISODE_TEMPLATE.md` | Core Runtime + Ops | Active |
 | Incident postmortem template | `ops/postmortem_template.md` | Ops + Security | Active |
 | Human continuity policy | `ops/continuity_policy.md` | Ops + Security | Draft |
 | Release gates | `docs/lifecycle/RELEASE_READINESS.md` | Core Runtime + Ops | Active |
