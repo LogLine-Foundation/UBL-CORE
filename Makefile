@@ -1,4 +1,4 @@
-.PHONY: all build test fmt lint kat gate gate-prod clean check load-validate docs-attest-keygen docs-attest-manifest docs-attest-sign docs-attest-verify bootstrap-core host-lockdown ops-maintenance forever-bootstrap workzone-cleanup
+.PHONY: all build test contract conformance quality-gate fmt lint kat gate gate-prod clean check load-validate docs-attest-keygen docs-attest-manifest docs-attest-sign docs-attest-verify bootstrap-core host-lockdown ops-maintenance forever-bootstrap workzone-cleanup
 
 all: build
 
@@ -7,6 +7,14 @@ build:
 
 test:
 	cargo test --workspace
+
+contract:
+	bash scripts/contract_suite.sh --out-dir artifacts/contract
+
+conformance:
+	bash scripts/conformance_suite.sh --out-dir artifacts/conformance
+
+quality-gate: fmt-check lint contract test conformance
 
 fmt:
 	cargo fmt --all

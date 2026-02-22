@@ -6,6 +6,10 @@
 
 A release is ready only when all gates below are green.
 
+Quality process references:
+- `TEST_STRATEGY.md`
+- `QUALITY_GATE.md`
+
 ## Gate Checklist
 
 - [ ] G1 Security trust chain closed
@@ -29,7 +33,9 @@ A release is ready only when all gates below are green.
 ## Required Evidence Artifacts
 
 1. CI test run URL or artifact set.
-2. Metrics snapshot from `/metrics` plus dashboard export.
-3. Rollout governance receipts (proposal + activation CIDs and traces).
-4. Incident drill notes (`docs/ops/INCIDENT_RUNBOOK.md`).
-5. Canary evidence from ledger receipts/traces (`docs/ops/PRODUCTION_SLICE_CANARY.md`).
+2. Contract report artifact (`artifacts/contract/latest.json` + logs).
+3. Conformance report artifact (`artifacts/conformance/latest.json` + logs).
+4. Metrics snapshot from `/metrics` plus dashboard export.
+5. Rollout governance receipts (proposal + activation CIDs and traces).
+6. Incident drill notes (`docs/ops/INCIDENT_RUNBOOK.md`).
+7. Canary evidence from ledger receipts/traces (`docs/ops/PRODUCTION_SLICE_CANARY.md`).

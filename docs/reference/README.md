@@ -31,6 +31,7 @@ Reference contracts are now source-of-truth artifacts exported or defined by Rus
 
 ## Conformance
 
+- Contract-first suite runner: `scripts/contract_suite.sh`
 - Official suite runner: `scripts/conformance_suite.sh`
 - CI artifact (per PR): `conformance-report` (JSON + Markdown + rule logs)
 - Primary contract vectors:
@@ -39,3 +40,7 @@ Reference contracts are now source-of-truth artifacts exported or defined by Rus
   - `crates/ubl_ai_nrf1/tests/rho_vectors.rs`
   - `crates/ubl_ai_nrf1/tests/golden_vectors.rs`
   - `crates/ubl_runtime/tests/canon_guardrails.rs`
+
+Process policy:
+- `TEST_STRATEGY.md`
+- `QUALITY_GATE.md`

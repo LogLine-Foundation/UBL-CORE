@@ -76,9 +76,62 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+  contract:
+    name: "🧷 CONTRACT"
+    needs: wa
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        id: toolchain
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: ${{ runner.os }}-${{ steps.toolchain.outputs.rustc_hash }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ steps.toolchain.outputs.rustc_hash }}-
+
+      - name: Enforce PR evidence fields
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          body_upper="$(printf '%s' "$PR_BODY" | tr '[:lower:]' '[:upper:]')"
+          required=(
+            "RED-FIRST EVIDENCE"
+            "GREEN EVIDENCE"
+            "CONFORMANCE"
+          )
+
+          for field in "${required[@]}"; do
+            if ! grep -Fq "$field" <<<"$body_upper"; then
+              echo "Missing required PR section: $field" >&2
+              exit 1
+            fi
+          done
+
+      - name: Run Contract Suite
+        run: |
+          chmod +x scripts/contract_suite.sh
+          scripts/contract_suite.sh --out-dir artifacts/contract
+
+      - name: Upload Contract Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-report
+          path: artifacts/contract
+          retention-days: 30
+
   tr:
     name: "⚡ TR"
-    needs: wa
+    needs: [wa, contract]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -220,7 +273,6 @@ jobs:
         if: steps.detect_simrunner.outputs.present == 'true'
         run: |
           cargo run -p ubl_gate > /tmp/ubl_gate.log 2>&1 &
-          echo "GATE_PID=$!" >> "$GITHUB_ENV"
 
       - name: Wait for Gate Health
         if: steps.detect_simrunner.outputs.present == 'true'
@@ -244,7 +296,7 @@ jobs:
       - name: Assert STX verify has no failures
         if: steps.detect_simrunner.outputs.present == 'true'
         run: |
-          if grep -R -nE 'stx/receipt\\.verify[^[:alnum:]]*(false|0)|\"verify\"[[:space:]]*:[[:space:]]*false' /tmp/simrunner.log simrunner 2>/dev/null; then
+          if grep -R -nE 'stx/receipt\.verify[^[:alnum:]]*(false|0)|"verify"[[:space:]]*:[[:space:]]*false' /tmp/simrunner.log simrunner 2>/dev/null; then
             echo "Detected failed receipt verification in STX run" >&2
             exit 1
           fi
@@ -258,45 +310,59 @@ jobs:
             /tmp/ubl_gate.log
             /tmp/simrunner.log
 
-      - name: Stop Gate
-        if: always() && steps.detect_simrunner.outputs.present == 'true'
-        run: |
-          if [[ -n "${GATE_PID:-}" ]]; then
-            kill "${GATE_PID}" || true
-          fi
-
   wf:
     name: "✅ WF"
-    needs: [knock, wa, tr, execute, conformance, simkit_stx]
+    needs: [knock, wa, contract, tr, execute, conformance, simkit_stx]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Evaluate
-        id: decision
+      - name: Evaluate quality gate
+        id: gate
         run: |
-          echo "============================================"
-          echo "  UBL PIPELINE — WRITE-FINISHED RECEIPT"
-          echo "============================================"
-          echo ""
+          fail=0
+
+          knock_result="${{ needs.knock.result }}"
+          wa_result="${{ needs.wa.result }}"
+          contract_result="${{ needs.contract.result }}"
+          tr_result="${{ needs.tr.result }}"
+          execute_result="${{ needs.execute.result }}"
+          conformance_result="${{ needs.conformance.result }}"
+          stx_result="${{ needs.simkit_stx.result }}"
+
           echo "Scope:    ${{ needs.knock.outputs.scope }}"
           echo "Affected: ${{ needs.knock.outputs.affected }}"
           echo "Breaking: ${{ needs.knock.outputs.breaking }}"
           echo ""
           echo "Results:"
-          echo "  WA:      ${{ needs.wa.result }}"
-          echo "  TR:      ${{ needs.tr.result }}"
-          echo "  EXECUTE: ${{ needs.execute.result }}"
-          echo "  CONFORM: ${{ needs.conformance.result }}"
-          echo "  SIMKIT:  ${{ needs.simkit_stx.result }}"
-          echo ""
+          echo "  KNOCK:      ${knock_result}"
+          echo "  WA:         ${wa_result}"
+          echo "  CONTRACT:   ${contract_result}"
+          echo "  TR:         ${tr_result}"
+          echo "  EXECUTE:    ${execute_result}"
+          echo "  CONFORM:    ${conformance_result}"
+          echo "  SIMKIT-STX: ${stx_result}"
 
-          if [[ "${{ needs.wa.result }}" == "success" && \
-                "${{ needs.tr.result }}" == "success" && \
-                "${{ needs.execute.result }}" == "success" && \
-                "${{ needs.conformance.result }}" == "success" && \
-                ("${{ needs.simkit_stx.result }}" == "success" || "${{ needs.simkit_stx.result }}" == "skipped") ]]; then
+          for pair in \
+            "knock:${knock_result}" \
+            "wa:${wa_result}" \
+            "contract:${contract_result}" \
+            "tr:${tr_result}" \
+            "execute:${execute_result}" \
+            "conformance:${conformance_result}"; do
+            name="${pair%%:*}"
+            result="${pair##*:}"
+            if [[ "${result}" != "success" ]]; then
+              echo "Required job failed: ${name} -> ${result}" >&2
+              fail=1
+            fi
+          done
+
+          if [[ "${stx_result}" != "success" && "${stx_result}" != "skipped" ]]; then
+            echo "SimKit STX must be success or skipped -> ${stx_result}" >&2
+            fail=1
+          fi
+
+          if [[ "$fail" -eq 0 ]]; then
             echo "decision=ALLOW" >> "$GITHUB_ENV"
             echo "🟢 DECISION: ALLOW"
           else
@@ -305,10 +371,9 @@ jobs:
             exit 1
           fi
 
-      - name: Generate Signed Receipt
+      - name: Generate signed receipt
         if: always()
         run: |
-          # Generate receipt
           cat > wf_receipt.json <<EOF
           {
             "type": "ubl/ci_receipt",
@@ -319,27 +384,26 @@ jobs:
             "scope": "${{ needs.knock.outputs.scope }}",
             "stages": {
               "wa": "${{ needs.wa.result }}",
+              "contract": "${{ needs.contract.result }}",
               "tr": "${{ needs.tr.result }}",
               "execute": "${{ needs.execute.result }}",
               "conformance": "${{ needs.conformance.result }}",
               "simkit_stx": "${{ needs.simkit_stx.result }}"
             },
-            "pipeline": "WA→TR→WF",
+            "pipeline": "WA→CONTRACT→TR→WF",
             "runtime": "github-actions",
             "autopoietic": true
           }
           EOF
 
-          # Sign with Ed25519 if ublx CLI available
-          if command -v ublx &> /dev/null; then
+          if command -v ublx >/dev/null 2>&1; then
             ublx sign wf_receipt.json --output wf_receipt.jws
             echo "✅ Receipt cryptographically signed"
           else
-            echo "⚠️  ublx CLI not available, skipping signature"
+            echo "⚠️  ublx CLI not available, storing raw receipt"
             cp wf_receipt.json wf_receipt.jws
           fi
 
-          echo "📋 Generated UBL Receipt:"
           cat wf_receipt.json
 
       - uses: actions/upload-artifact@v4

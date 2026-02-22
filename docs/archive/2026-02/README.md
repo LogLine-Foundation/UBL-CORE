@@ -4,6 +4,7 @@ This folder preserves superseded documents moved during documentation governance
 
 ## Archived Files
 
+- `TASKLIST_MASTER_ARCHIVE_2026-02-22.md` (pre-LAB512 unified tasklist snapshot)
 - `TASKLIST_FULL_PRAGMATIC.md` (duplicate execution tracker)
 - `ROADMAP_DECADE.md` (visionary horizon doc, not execution source)
 - `MANIFESTO_DE_REINVENCAO_BIG.md` (strategy manifesto)

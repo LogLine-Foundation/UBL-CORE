@@ -23,6 +23,8 @@ This is the entry point for all project documentation.
 | API contract | `/openapi.json` + `crates/ubl_runtime/src/manifest.rs` | Gate | Active |
 | Environment/config flags | `docs/reference/README.md` + runtime/gate env reads in code | Runtime + Gate | Active |
 | Error taxonomy | `crates/ubl_runtime/src/error_response.rs` | Runtime | Active |
+| Test strategy (contract-first) | `TEST_STRATEGY.md` | Core Runtime | Active |
+| Merge/release quality gates | `QUALITY_GATE.md` | Core Runtime + Ops | Active |
 | Crypto trust model | `SECURITY.md` | Security | Active |
 | Docs attestation flow | `docs/security/DOC_ATTESTATION.md` | Security | Active |
 | Forever host bootstrap runbook | `docs/ops/FOREVER_BOOTSTRAP.md` | Ops + Security | Active |
@@ -31,6 +33,7 @@ This is the entry point for all project documentation.
 | Host lockdown and cleanup | `docs/ops/HOST_LOCKDOWN_AND_CLEANUP.md` | Ops + Security | Active |
 | Key rotation plan | `docs/key_rotation_plan.md` | Security | Active |
 | Offline receipt verification model | `docs/ops/OFFLINE_RECEIPT_VERIFICATION.md` | Core Runtime + CLI | Planned |
+| Final pragmatic position (LAB512 + Episode1) | `docs/ops/BOOTSTRAP_FINAL_TEXT.md` | Core Runtime + Ops | Active |
 | Incident postmortem template | `ops/postmortem_template.md` | Ops + Security | Active |
 | Human continuity policy | `ops/continuity_policy.md` | Ops + Security | Draft |
 | Release gates | `docs/lifecycle/RELEASE_READINESS.md` | Core Runtime + Ops | Active |
@@ -63,4 +66,6 @@ This is the entry point for all project documentation.
 8. `/openapi.json`
 9. `docs/ops/INCIDENT_RUNBOOK.md`
 10. `docs/lifecycle/RELEASE_READINESS.md`
-11. `docs/oss/OPEN_SOURCE_SCOPE.md`
+11. `TEST_STRATEGY.md`
+12. `QUALITY_GATE.md`
+13. `docs/oss/OPEN_SOURCE_SCOPE.md`

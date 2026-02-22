@@ -35,3 +35,7 @@ sled_data/
 /tmp/
 release-artifacts/
 artifacts/conformance/
+artifacts/contract/
+
+# Local operational reports
+data/rollout_report.json

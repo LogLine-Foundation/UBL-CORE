@@ -24,6 +24,23 @@ cargo run -p ubl_gate
 
 Gate default: `http://localhost:4000`
 
+## Quality Workflow
+
+```bash
+# Contract-first checks (black-box invariants)
+make contract
+
+# Full compatibility contract (conformance vectors + reports)
+make conformance
+
+# Full local gate before PR
+make quality-gate
+```
+
+Process references:
+- `TEST_STRATEGY.md`
+- `QUALITY_GATE.md`
+
 ## Primary Endpoints
 
 - `POST /v1/chips`
