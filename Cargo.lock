@@ -3302,6 +3302,7 @@ dependencies = [
  "tokio",
  "ubl_ai_nrf1",
  "ubl_chipstore",
+ "ubl_kms",
  "ubl_receipt",
  "ubl_runtime",
  "ubl_types",
