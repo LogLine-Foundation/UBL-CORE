@@ -162,6 +162,9 @@ Recommended:
 
 - Use `ubl/token` for machine clients (ChatGPT Actions/MCP connectors).
 - Keep API keys only for emergency bootstrap or break-glass operations.
+- For operational onboarding flow, use:
+  - `docs/ops/CHATGPT_CONNECTOR_ONBOARDING.md`
+  - `scripts/onboard_chatgpt_connector.sh`
 
 ## Conclusion
 

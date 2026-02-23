@@ -22,6 +22,7 @@ ubl_chipstore = { path = "../ubl_chipstore" }
 ubl_receipt = { path = "../ubl_receipt" }
 ubl_types = { workspace = true }
 rb_vm = { path = "../rb_vm" }
+ubl_kms = { path = "../ubl_kms" }
 chrono = { version = "0.4", features = ["serde"] }
 blake3 = { workspace = true }
 hex = "0.4"

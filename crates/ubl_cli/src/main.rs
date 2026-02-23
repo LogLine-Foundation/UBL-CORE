@@ -32,6 +32,21 @@ enum Commands {
         /// Path to a JSON file
         file: String,
     },
+    /// Submit a chip JSON file to a running UBL gate
+    Submit {
+        /// Path to chip JSON file
+        #[arg(short, long)]
+        input: String,
+        /// Base URL of the gate (e.g. http://127.0.0.1:4000)
+        #[arg(long, default_value = "http://127.0.0.1:4000")]
+        gate: String,
+        /// Optional path to write raw gate response JSON
+        #[arg(short, long)]
+        output: Option<String>,
+        /// HTTP timeout in seconds
+        #[arg(long, default_value = "30")]
+        timeout_secs: u64,
+    },
     /// Explain a WF receipt: print RB tree with PASS/DENY per node
     Explain {
         /// CID of the receipt, or path to a receipt JSON file
@@ -80,10 +95,85 @@ enum Commands {
         #[arg(long)]
         hex: bool,
     },
+    /// DID key utilities
+    Did {
+        #[command(subcommand)]
+        command: DidCommands,
+    },
+    /// Capability signing utilities
+    Cap {
+        #[command(subcommand)]
+        command: CapCommands,
+    },
     /// Silicon chip compiler and disassembler
     Silicon {
         #[command(subcommand)]
         command: SiliconCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum DidCommands {
+    /// Generate a new Ed25519 keypair and print DID material
+    Generate {
+        /// Write JSON output to file
+        #[arg(short, long)]
+        output: Option<String>,
+        /// Use strict did:key multicodec format (0xED01)
+        #[arg(long, default_value_t = false)]
+        strict: bool,
+    },
+    /// Derive DID material from an existing Ed25519 signing key hex
+    FromKey {
+        /// 64-char Ed25519 private seed hex
+        #[arg(long)]
+        signing_key_hex: String,
+        /// Write JSON output to file
+        #[arg(short, long)]
+        output: Option<String>,
+        /// Use strict did:key multicodec format (0xED01)
+        #[arg(long, default_value_t = false)]
+        strict: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum CapCommands {
+    /// Issue a signed @cap payload using an Ed25519 signing key
+    Issue {
+        /// Capability action (e.g. registry:init, membership:grant)
+        #[arg(long)]
+        action: String,
+        /// Capability audience world scope (e.g. a/chip-registry or a/chip-registry/t/logline)
+        #[arg(long)]
+        audience: String,
+        /// 64-char Ed25519 private seed hex
+        #[arg(long)]
+        signing_key_hex: String,
+        /// Optional issuer DID override (default derives from signing key)
+        #[arg(long)]
+        issued_by: Option<String>,
+        /// Optional issued_at timestamp (RFC3339; default now UTC)
+        #[arg(long)]
+        issued_at: Option<String>,
+        /// Optional expires_at timestamp (RFC3339; default now+365d)
+        #[arg(long)]
+        expires_at: Option<String>,
+        /// Write JSON output to file
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+    /// Verify a capability JSON against required action/world
+    Verify {
+        /// Path to capability JSON file (either raw cap object or chip body containing @cap)
+        #[arg(long)]
+        input: String,
+        /// Required action (e.g. registry:init)
+        #[arg(long)]
+        action: String,
+        /// World to validate against (e.g. a/chip-registry or a/chip-registry/t/logline)
+        #[arg(long)]
+        world: String,
     },
 }
 
@@ -139,6 +229,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Verify { chip_file } => cmd_verify(&chip_file)?,
         Commands::Build { input, output } => cmd_build(&input, output)?,
         Commands::Cid { file } => cmd_cid(&file)?,
+        Commands::Submit {
+            input,
+            gate,
+            output,
+            timeout_secs,
+        } => cmd_submit(&input, &gate, output, timeout_secs).await?,
         Commands::Explain { target } => cmd_explain(&target)?,
         Commands::Search {
             chip_type,
@@ -152,6 +248,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Fixture { output_dir, count } => cmd_fixture(&output_dir, count)?,
         Commands::Url { receipt_cid, host } => cmd_url(&receipt_cid, &host)?,
         Commands::Disasm { input, hex } => cmd_disasm(&input, hex)?,
+        Commands::Did { command } => match command {
+            DidCommands::Generate { output, strict } => cmd_did_generate(output.as_deref(), strict)?,
+            DidCommands::FromKey {
+                signing_key_hex,
+                output,
+                strict,
+            } => cmd_did_from_key(&signing_key_hex, output.as_deref(), strict)?,
+        },
+        Commands::Cap { command } => match command {
+            CapCommands::Issue {
+                action,
+                audience,
+                signing_key_hex,
+                issued_by,
+                issued_at,
+                expires_at,
+                output,
+            } => cmd_cap_issue(
+                &action,
+                &audience,
+                &signing_key_hex,
+                issued_by.as_deref(),
+                issued_at.as_deref(),
+                expires_at.as_deref(),
+                output.as_deref(),
+            )?,
+            CapCommands::Verify {
+                input,
+                action,
+                world,
+            } => cmd_cap_verify(&input, &action, &world)?,
+        },
         Commands::Silicon { command } => match command {
             SiliconCommands::Compile {
                 bundle,
@@ -212,6 +340,176 @@ fn cmd_cid(file: &str) -> Result<(), Box<dyn std::error::Error>> {
     let nrf_bytes = to_nrf1_bytes(&json)?;
     let cid = compute_cid(&nrf_bytes)?;
     println!("{}", cid);
+    Ok(())
+}
+
+// ── did / cap helpers ──────────────────────────────────────────
+
+fn did_material_json(
+    sk: &ubl_kms::Ed25519SigningKey,
+    strict: bool,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let vk = ubl_kms::verifying_key(sk);
+    let did = if strict {
+        ubl_kms::did_from_verifying_key_strict(&vk)
+    } else {
+        ubl_kms::did_from_verifying_key(&vk)
+    };
+    let kid = format!("{}#ed25519", did);
+    let signing_key_hex = hex::encode(sk.to_bytes());
+    let public_key_hex = hex::encode(vk.to_bytes());
+    let key_cid = ubl_kms::key_cid(&vk);
+
+    Ok(json!({
+        "did": did,
+        "kid": kid,
+        "signing_key_hex": signing_key_hex,
+        "public_key_hex": public_key_hex,
+        "key_cid": key_cid,
+    }))
+}
+
+fn write_or_print_json(
+    value: &Value,
+    output: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let text = serde_json::to_string_pretty(value)?;
+    if let Some(path) = output {
+        std::fs::write(path, text.as_bytes())?;
+        println!("wrote {}", path);
+    } else {
+        println!("{}", text);
+    }
+    Ok(())
+}
+
+fn cmd_did_generate(output: Option<&str>, strict: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let sk = ubl_kms::generate_signing_key();
+    let out = did_material_json(&sk, strict)?;
+    write_or_print_json(&out, output)
+}
+
+fn cmd_did_from_key(
+    signing_key_hex: &str,
+    output: Option<&str>,
+    strict: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let sk = ubl_kms::signing_key_from_hex(signing_key_hex)?;
+    let out = did_material_json(&sk, strict)?;
+    write_or_print_json(&out, output)
+}
+
+fn cmd_cap_issue(
+    action: &str,
+    audience: &str,
+    signing_key_hex: &str,
+    issued_by: Option<&str>,
+    issued_at: Option<&str>,
+    expires_at: Option<&str>,
+    output: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let sk = ubl_kms::signing_key_from_hex(signing_key_hex)?;
+    let vk = ubl_kms::verifying_key(&sk);
+    let derived_issuer = ubl_kms::did_from_verifying_key_strict(&vk);
+    let issuer = issued_by.unwrap_or(derived_issuer.as_str());
+    if issuer != derived_issuer {
+        return Err(format!(
+            "issued_by '{}' does not match signing key DID '{}'",
+            issuer, derived_issuer
+        )
+        .into());
+    }
+
+    let issued_at_ts = issued_at
+        .map(ToString::to_string)
+        .unwrap_or_else(|| {
+            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        });
+    let expires_at_ts = expires_at.map(ToString::to_string).unwrap_or_else(|| {
+        (chrono::Utc::now() + chrono::Duration::days(365))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+    });
+
+    let payload = json!({
+        "action": action,
+        "audience": audience,
+        "issued_by": issuer,
+        "issued_at": issued_at_ts,
+        "expires_at": expires_at_ts,
+    });
+    let signature = ubl_kms::sign_canonical(&sk, &payload, ubl_kms::domain::CAPABILITY)?;
+
+    let cap = json!({
+        "action": action,
+        "audience": audience,
+        "issued_by": issuer,
+        "issued_at": issued_at_ts,
+        "expires_at": expires_at_ts,
+        "signature": signature,
+    });
+    write_or_print_json(&cap, output)
+}
+
+fn cmd_cap_verify(
+    input: &str,
+    required_action: &str,
+    world: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let raw = std::fs::read_to_string(input)?;
+    let value: Value = serde_json::from_str(&raw)?;
+    let cap = if value.get("@cap").is_some() {
+        ubl_runtime::capability::extract_cap(&value)?
+    } else {
+        serde_json::from_value::<ubl_runtime::capability::Capability>(value)?
+    };
+    ubl_runtime::capability::validate_cap(&cap, required_action, world)?;
+    println!(
+        "capability ok action='{}' audience='{}' world='{}'",
+        cap.action, cap.audience, world
+    );
+    Ok(())
+}
+
+// ── submit ──────────────────────────────────────────────────────
+
+async fn cmd_submit(
+    input: &str,
+    gate: &str,
+    output: Option<String>,
+    timeout_secs: u64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let payload = std::fs::read(input)?;
+    let endpoint = format!("{}/v1/chips", gate.trim_end_matches('/'));
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()?;
+
+    let resp = client
+        .post(&endpoint)
+        .header("content-type", "application/json")
+        .body(payload)
+        .send()
+        .await?;
+
+    let status = resp.status();
+    let body_text = resp.text().await?;
+    if !status.is_success() {
+        return Err(format!("gate submit failed: {} {}", status, body_text).into());
+    }
+
+    let response_json: Value = serde_json::from_str(&body_text)?;
+    if let Some(out) = output {
+        std::fs::write(out, serde_json::to_vec_pretty(&response_json)?)?;
+    }
+
+    if let Some(receipt_cid) = response_json.get("receipt_cid").and_then(|v| v.as_str()) {
+        println!("receipt_cid={}", receipt_cid);
+    }
+    if let Some(receipt_url) = response_json.get("receipt_url").and_then(|v| v.as_str()) {
+        println!("receipt_url={}", receipt_url);
+    }
+    println!("{}", serde_json::to_string_pretty(&response_json)?);
     Ok(())
 }
 
