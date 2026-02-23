@@ -55,11 +55,11 @@ Previous tasklist archived at: `docs/archive/2026-02/TASKLIST_MASTER_ARCHIVE_202
 
 ## Phase 3 — Bootstrap Pipeline Hardening
 
-- [ ] Final review of `scripts/forever_bootstrap.sh` for LAB 512 execution path.
-- [ ] Final review of `scripts/host_lockdown.sh` for service-user model (`ubl-service`).
-- [ ] Final review of `scripts/workzone_cleanup.sh` for safe cleanup boundaries.
-- [ ] Ensure final bundle generation/upload is mandatory where required.
-- [ ] Ensure final local checks emit canonical report + receipt.
+- [x] Final review of `scripts/forever_bootstrap.sh` for LAB 512 execution path.
+- [x] Final review of `scripts/host_lockdown.sh` for service-user model (`ubl-service`).
+- [x] Final review of `scripts/workzone_cleanup.sh` for safe cleanup boundaries.
+- [x] Ensure final bundle generation/upload is mandatory where required.
+- [x] Ensure final local checks emit canonical report + receipt.
 
 ---
 
@@ -77,8 +77,8 @@ Previous tasklist archived at: `docs/archive/2026-02/TASKLIST_MASTER_ARCHIVE_202
 
 ## Phase 5 — Quality Gates Before Promotion
 
-- [ ] `make contract` passes.
-- [ ] `make conformance` passes.
+- [x] `make contract` passes.
+- [x] `make conformance` passes.
 - [ ] CI `WF` gate passes with CONTRACT + CONFORMANCE.
 - [ ] Reproducibility/attestation checks pass for target commit.
 - [ ] Promotion checklist (`LAB 256 -> LAB 512`) signed off.
