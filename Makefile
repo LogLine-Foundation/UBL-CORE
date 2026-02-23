@@ -1,4 +1,4 @@
-.PHONY: all build test contract conformance quality-gate fmt lint kat gate gate-prod clean check load-validate docs-attest-keygen docs-attest-manifest docs-attest-sign docs-attest-verify bootstrap-core host-lockdown ops-maintenance forever-bootstrap workzone-cleanup
+.PHONY: all build test contract conformance wasm-conformance wasm-conformance-all quality-gate fmt lint kat gate gate-prod clean check load-validate docs-attest-keygen docs-attest-manifest docs-attest-sign docs-attest-verify bootstrap-core host-lockdown ops-maintenance forever-bootstrap workzone-cleanup
 
 all: build
 
@@ -13,6 +13,12 @@ contract:
 
 conformance:
 	bash scripts/conformance_suite.sh --out-dir artifacts/conformance
+
+wasm-conformance:
+	bash scripts/wasm_conformance.sh --out-dir artifacts/wasm-conformance
+
+wasm-conformance-all:
+	bash scripts/wasm_conformance.sh --mode all --out-dir artifacts/wasm-conformance
 
 quality-gate: fmt-check lint contract test conformance
 

@@ -6,6 +6,8 @@
 
 Previous tasklist archived at: `docs/archive/2026-02/TASKLIST_MASTER_ARCHIVE_2026-02-22.md`
 
+Parallel execution program: `docs/ops/WASM_RUNTIME_HARDENING_TASKLIST.md` (WASM runtime production hardening, spec/vector/DoD-first).
+
 ---
 
 ## Operating Rules

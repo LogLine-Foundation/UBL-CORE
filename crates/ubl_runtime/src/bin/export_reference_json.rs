@@ -19,6 +19,19 @@ fn all_error_codes() -> Vec<ErrorCode> {
         ErrorCode::PolicyDenied,
         ErrorCode::InvalidChip,
         ErrorCode::DependencyMissing,
+        ErrorCode::WasmAbiMissingVersion,
+        ErrorCode::WasmAbiUnsupportedVersion,
+        ErrorCode::WasmAbiInvalidPayload,
+        ErrorCode::WasmVerifyHashMismatch,
+        ErrorCode::WasmVerifySignatureInvalid,
+        ErrorCode::WasmVerifyTrustAnchorMismatch,
+        ErrorCode::WasmCapabilityDenied,
+        ErrorCode::WasmCapabilityDeniedNetwork,
+        ErrorCode::WasmDeterminismViolation,
+        ErrorCode::WasmResourceFuelExhausted,
+        ErrorCode::WasmResourceMemoryLimit,
+        ErrorCode::WasmResourceTimeout,
+        ErrorCode::WasmReceiptBindingMissingClaim,
         ErrorCode::FuelExhausted,
         ErrorCode::TypeMismatch,
         ErrorCode::StackUnderflow,
@@ -58,6 +71,19 @@ fn assert_exhaustive(code: ErrorCode) {
         | ErrorCode::PolicyDenied
         | ErrorCode::InvalidChip
         | ErrorCode::DependencyMissing
+        | ErrorCode::WasmAbiMissingVersion
+        | ErrorCode::WasmAbiUnsupportedVersion
+        | ErrorCode::WasmAbiInvalidPayload
+        | ErrorCode::WasmVerifyHashMismatch
+        | ErrorCode::WasmVerifySignatureInvalid
+        | ErrorCode::WasmVerifyTrustAnchorMismatch
+        | ErrorCode::WasmCapabilityDenied
+        | ErrorCode::WasmCapabilityDeniedNetwork
+        | ErrorCode::WasmDeterminismViolation
+        | ErrorCode::WasmResourceFuelExhausted
+        | ErrorCode::WasmResourceMemoryLimit
+        | ErrorCode::WasmResourceTimeout
+        | ErrorCode::WasmReceiptBindingMissingClaim
         | ErrorCode::FuelExhausted
         | ErrorCode::TypeMismatch
         | ErrorCode::StackUnderflow

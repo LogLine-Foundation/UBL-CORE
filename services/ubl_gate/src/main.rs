@@ -5788,8 +5788,13 @@ mod tests {
             public_worlds: vec!["a/chip-registry/t/public".to_string()],
             public_types: vec!["ubl/document".to_string()],
         });
-        seed_token_chip(&state, "tok-write-wrong-world", "a/chip-registry/t/public", &["write"])
-            .await;
+        seed_token_chip(
+            &state,
+            "tok-write-wrong-world",
+            "a/chip-registry/t/public",
+            &["write"],
+        )
+        .await;
         let app = build_router(state);
 
         let chip = json!({
@@ -5880,7 +5885,13 @@ mod tests {
             public_worlds: vec!["a/chip-registry/t/public".to_string()],
             public_types: vec!["ubl/document".to_string()],
         });
-        seed_token_chip(&state, "tok-mcp-write-1", "a/private/t/main", &["mcp:write"]).await;
+        seed_token_chip(
+            &state,
+            "tok-mcp-write-1",
+            "a/private/t/main",
+            &["mcp:write"],
+        )
+        .await;
         let app = build_router(state);
 
         let rpc = json!({

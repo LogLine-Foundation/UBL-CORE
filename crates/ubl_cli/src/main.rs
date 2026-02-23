@@ -249,7 +249,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Url { receipt_cid, host } => cmd_url(&receipt_cid, &host)?,
         Commands::Disasm { input, hex } => cmd_disasm(&input, hex)?,
         Commands::Did { command } => match command {
-            DidCommands::Generate { output, strict } => cmd_did_generate(output.as_deref(), strict)?,
+            DidCommands::Generate { output, strict } => {
+                cmd_did_generate(output.as_deref(), strict)?
+            }
             DidCommands::FromKey {
                 signing_key_hex,
                 output,
@@ -422,9 +424,7 @@ fn cmd_cap_issue(
 
     let issued_at_ts = issued_at
         .map(ToString::to_string)
-        .unwrap_or_else(|| {
-            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-        });
+        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
     let expires_at_ts = expires_at.map(ToString::to_string).unwrap_or_else(|| {
         (chrono::Utc::now() + chrono::Duration::days(365))
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
