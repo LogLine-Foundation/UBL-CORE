@@ -153,6 +153,9 @@ Notes:
 - Write operations (`ubl.deliver` / `POST /v1/chips`) support:
   - `Authorization: Bearer <token_id>` resolved against `ubl/token` chips (preferred).
   - `X-API-Key` (optional fallback/break-glass).
+- Bearer tokens are bound to token `@world` scope:
+  - token can write only to same `@world` or child prefix of that world.
+  - cross-world writes return `POLICY_DENIED`.
 - Public write lane can remain open for onboarding/public registry worlds by policy.
 
 Recommended:

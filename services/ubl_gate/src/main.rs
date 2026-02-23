@@ -525,6 +525,24 @@ fn extract_api_key(headers: &HeaderMap) -> Option<String> {
     Some(token.to_string())
 }
 
+fn world_scope_allows(scope_world: &str, target_world: &str) -> bool {
+    let scope = scope_world.trim().trim_end_matches('/');
+    let target = target_world.trim().trim_end_matches('/');
+    if scope.is_empty() || target.is_empty() {
+        return false;
+    }
+    if scope == "*" {
+        return true;
+    }
+    if target == scope {
+        return true;
+    }
+    target
+        .strip_prefix(scope)
+        .map(|rest| rest.starts_with('/'))
+        .unwrap_or(false)
+}
+
 fn public_receipt_origin_from_env() -> String {
     if let Some(origin) = env_opt_trim("UBL_PUBLIC_RECEIPT_ORIGIN") {
         return origin;
@@ -825,18 +843,46 @@ async fn submit_chip_bytes(
         }
     };
 
+    let mut subject_did_from_token_hint: Option<String> = None;
+
     if !trusted_write {
         let chip_type = value.get("@type").and_then(|v| v.as_str()).unwrap_or("");
         let world = value.get("@world").and_then(|v| v.as_str()).unwrap_or("");
         let mut authorized_via_token = false;
-        let mut subject_did_from_token: Option<String> = None;
         if let Some(h) = headers {
             if parse_bearer_token(h).is_some() {
                 match resolve_session_bearer(state, h).await {
                     Ok(Some(auth)) => {
                         if scope_allows_any(&auth.scope, &["write", "chip:write", "mcp:write"]) {
+                            if !world_scope_allows(&auth.world, world) {
+                                let err_code = ErrorCode::PolicyDenied;
+                                let reason_msg = format!(
+                                    "token world '{}' does not authorize target world '{}'",
+                                    auth.world, world
+                                );
+                                let subject_did = auth.subject_did.clone().unwrap_or_else(|| {
+                                    ubl_runtime::authorship::resolve_subject_did(
+                                        Some(&value),
+                                        Some(&actor_hint),
+                                    )
+                                });
+                                let reason_code = serde_json::to_value(err_code)
+                                    .ok()
+                                    .and_then(|v| v.as_str().map(|s| s.to_string()))
+                                    .unwrap_or_else(|| "POLICY_DENIED".to_string());
+                                return deny_write_with_receipt(
+                                    state,
+                                    &knock_cid,
+                                    &reason_code,
+                                    &reason_msg,
+                                    err_code,
+                                    &value,
+                                    subject_did,
+                                )
+                                .await;
+                            }
                             authorized_via_token = true;
-                            subject_did_from_token = auth.subject_did.clone();
+                            subject_did_from_token_hint = auth.subject_did.clone();
                         } else {
                             let err_code = ErrorCode::PolicyDenied;
                             let reason_msg = "token scope does not allow write".to_string();
@@ -893,7 +939,7 @@ async fn submit_chip_bytes(
                 .write_access_policy
                 .authorize_write(headers, chip_type, world)
             {
-                let subject_did = subject_did_from_token.clone().unwrap_or_else(|| {
+                let subject_did = subject_did_from_token_hint.clone().unwrap_or_else(|| {
                     ubl_runtime::authorship::resolve_subject_did(Some(&value), Some(&actor_hint))
                 });
                 let reason_code = serde_json::to_value(err_code)
@@ -951,20 +997,9 @@ async fn submit_chip_bytes(
         operation: Some("create".to_string()),
     };
     let subject_did = if !trusted_write {
-        if let Some(h) = headers {
-            if let Ok(Some(auth)) = resolve_session_bearer(state, h).await {
-                auth.subject_did.unwrap_or_else(|| {
-                    ubl_runtime::authorship::resolve_subject_did(
-                        Some(&request.body),
-                        Some(&actor_hint),
-                    )
-                })
-            } else {
-                ubl_runtime::authorship::resolve_subject_did(Some(&request.body), Some(&actor_hint))
-            }
-        } else {
+        subject_did_from_token_hint.unwrap_or_else(|| {
             ubl_runtime::authorship::resolve_subject_did(Some(&request.body), Some(&actor_hint))
-        }
+        })
     } else {
         ubl_runtime::authorship::resolve_subject_did(Some(&request.body), Some(&actor_hint))
     };
@@ -4562,6 +4597,15 @@ async fn resolve_session_bearer(
         return Err("token revoked".to_string());
     }
 
+    let token_world = token_chip
+        .chip_data
+        .get("@world")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| "token missing @world".to_string())?
+        .to_string();
+
     let subject_did = match state.chip_store.get_chip(&session.user_cid).await {
         Ok(Some(user_chip)) => user_chip
             .chip_data
@@ -4572,15 +4616,29 @@ async fn resolve_session_bearer(
         _ => None,
     };
 
+    let user_revoke_query = ubl_chipstore::ChipQuery {
+        chip_type: Some("ubl/revoke".to_string()),
+        tags: vec![format!("target_cid:{}", session.user_cid.as_str())],
+        created_after: None,
+        created_before: None,
+        executor_did: None,
+        limit: Some(1),
+        offset: None,
+    };
+    let user_revoked = state
+        .chip_store
+        .query(&user_revoke_query)
+        .await
+        .map(|r| r.total_count > 0)
+        .unwrap_or(false);
+    if user_revoked {
+        return Err("token user revoked".to_string());
+    }
+
     Ok(Some(McpWsAuth {
         token_id,
         token_cid: token_chip.cid.as_str().to_string(),
-        world: token_chip
-            .chip_data
-            .get("@world")
-            .and_then(|v| v.as_str())
-            .unwrap_or("a/system")
-            .to_string(),
+        world: token_world,
         scope: session.scope,
         subject_did,
     }))
@@ -5471,7 +5529,7 @@ mod tests {
             .unwrap();
     }
 
-    async fn seed_token_chip(state: &AppState, token_id: &str, scope: &[&str]) {
+    async fn seed_token_chip(state: &AppState, token_id: &str, world: &str, scope: &[&str]) {
         let metadata: ubl_chipstore::ExecutionMetadata = serde_json::from_value(json!({
             "runtime_version": "test-runtime",
             "execution_time_ms": 1,
@@ -5487,7 +5545,7 @@ mod tests {
             "@type":"ubl/token",
             "@id": token_id,
             "@ver":"1.0",
-            "@world":"a/chip-registry/t/logline",
+            "@world": world,
             "user_cid":"b3:user-test",
             "scope": scope,
             "expires_at": expires_at,
@@ -5700,7 +5758,7 @@ mod tests {
             public_worlds: vec!["a/chip-registry/t/public".to_string()],
             public_types: vec!["ubl/document".to_string()],
         });
-        seed_token_chip(&state, "tok-write-1", &["write"]).await;
+        seed_token_chip(&state, "tok-write-1", "a/private/t/main", &["write"]).await;
         let app = build_router(state);
 
         let chip = json!({
@@ -5720,6 +5778,45 @@ mod tests {
             .unwrap();
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn chips_endpoint_denies_private_write_when_bearer_world_mismatch() {
+        let state = test_state_with_write_policy(WriteAccessPolicy {
+            auth_required: true,
+            api_keys: vec![],
+            public_worlds: vec!["a/chip-registry/t/public".to_string()],
+            public_types: vec!["ubl/document".to_string()],
+        });
+        seed_token_chip(&state, "tok-write-wrong-world", "a/chip-registry/t/public", &["write"])
+            .await;
+        let app = build_router(state);
+
+        let chip = json!({
+            "@type": "ubl/document",
+            "@id": "guard-private-bearer-world-1",
+            "@ver": "1.0",
+            "@world": "a/private/t/main",
+            "title": "private lane with bearer world mismatch"
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/chips")
+            .header("content-type", "application/json")
+            .header("authorization", "Bearer tok-write-wrong-world")
+            .body(Body::from(chip.to_string()))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let v: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(v["code"], "POLICY_DENIED");
+        assert_eq!(v["decision"], "Deny");
+        assert!(v["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("does not authorize target world"));
     }
 
     #[tokio::test]
@@ -5783,7 +5880,7 @@ mod tests {
             public_worlds: vec!["a/chip-registry/t/public".to_string()],
             public_types: vec!["ubl/document".to_string()],
         });
-        seed_token_chip(&state, "tok-mcp-write-1", &["mcp:write"]).await;
+        seed_token_chip(&state, "tok-mcp-write-1", "a/private/t/main", &["mcp:write"]).await;
         let app = build_router(state);
 
         let rpc = json!({
@@ -5816,6 +5913,55 @@ mod tests {
         let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
         let v: Value = serde_json::from_slice(&body).unwrap();
         assert!(v.get("result").is_some());
+    }
+
+    #[tokio::test]
+    async fn mcp_tools_call_denies_private_write_when_bearer_world_mismatch() {
+        let state = test_state_with_write_policy(WriteAccessPolicy {
+            auth_required: true,
+            api_keys: vec![],
+            public_worlds: vec!["a/chip-registry/t/public".to_string()],
+            public_types: vec!["ubl/document".to_string()],
+        });
+        seed_token_chip(
+            &state,
+            "tok-mcp-write-wrong-world",
+            "a/chip-registry/t/public",
+            &["mcp:write"],
+        )
+        .await;
+        let app = build_router(state);
+
+        let rpc = json!({
+            "jsonrpc":"2.0",
+            "id":"m3",
+            "method":"tools/call",
+            "params":{
+                "name":"ubl.deliver",
+                "arguments":{
+                    "chip":{
+                        "@type":"ubl/document",
+                        "@id":"mcp-private-bearer-world-1",
+                        "@ver":"1.0",
+                        "@world":"a/private/t/main",
+                        "title":"mcp bearer world mismatch"
+                    }
+                }
+            }
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/mcp/rpc")
+            .header("content-type", "application/json")
+            .header("authorization", "Bearer tok-mcp-write-wrong-world")
+            .body(Body::from(rpc.to_string()))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let v: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(v["error"]["code"], -32003);
     }
 
     #[tokio::test]
