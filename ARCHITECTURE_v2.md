@@ -888,6 +888,56 @@ Um contrato em que ambos podem agir, responder e evoluir com rastro verificável
 
 ---
 
+## 17. Direções Futuras Priorizadas (Não Normativas)
+
+Esta seção consolida propostas de evolução que agregam ao núcleo constitucional sem engessar a implementação.
+
+### 17.1 Performance e escala de pipeline
+- Execução paralela por `@world` SHOULD ser adotada para preservar serialização local e escalar horizontalmente.
+- Bateladas com idempotência MAY ser usadas em cenários de alto throughput, com chave de idempotência obrigatória.
+- Cache de decisão de policy MAY ser aplicado quando `chip_cid` e `policy_version` forem idênticos.
+
+### 17.2 Hardening de fronteiras fractais
+- Tokens de capacidade SHOULD carregar `context` criptograficamente vinculado ao emissor.
+- Hierarquias de chave de contexto pessoal e plataforma SHOULD permanecer separadas por design e operação.
+- Interações cross-context SHOULD ocorrer por handshake explícito via chip no gate, com token temporário de escopo estreito.
+
+### 17.3 Integração advisor-runtime
+- Tipo de chip de proposta (`proposal`) SHOULD ser formalizado para transformar intenção consultiva em entrada rastreável de pipeline.
+- Saídas de advisor usadas em decisão humana SHOULD referenciar receipt de origem e gerar trilha própria.
+- Feedback de resultado (proposal -> outcome) MAY ser usado para melhoria de advisor sob política explícita.
+
+### 17.4 Reconciliação em escala federada
+- Reconciliação por estruturas de hash (ex.: Merkle) MAY ser adotada para reduzir custo de comparação entre contextos.
+- Protocolos de gossip MAY ser usados para detecção incremental de divergência entre nós federados.
+- Provas de inclusão criptográfica SHOULD ser preferidas a transferência de histórico completo quando possível.
+
+### 17.5 Decisão humana auditável
+- Decisão humana em conflito SHOULD ser registrada como chip assinado pelo decisor e processada pelo pipeline completo.
+- Casos de alto impacto MAY exigir política de múltiplas assinaturas (M-of-N).
+- Toda ação humana de resolução SHOULD deixar trilha de custódia auditável.
+
+### 17.6 Fuel e orçamento operacional
+- Fuel multidimensional (compute, storage, network, advisor invocation) SHOULD evoluir como modelo padrão.
+- Metrição em tempo real por estágio SHOULD produzir recibo de consumo para cada execução.
+- Exaustão de fuel MUST permanecer erro explícito e auditável (sem bypass implícito).
+
+### 17.7 Verificação de invariantes
+- Modelagem formal (TLA+/Alloy) MAY ser adotada para validar propriedades globais do pipeline.
+- Testes baseados em propriedades SHOULD complementar suites de conformidade.
+- Invariantes críticos SHOULD ter asserts em builds de teste e validação contínua.
+
+### 17.8 Interoperabilidade e padrões
+- DID/VC MAY ser adotado como camada de interoperabilidade para identidade e passaporte, sem alterar invariantes do core.
+- Alinhamento de CID e CAS com padrões amplamente usados SHOULD priorizar portabilidade.
+
+### 17.9 Privacidade com ledger imutável
+- Criptografia com destruição de chave SHOULD ser padrão para dados sensíveis sujeitos a remoção lógica.
+- Tombstone chips SHOULD registrar solicitações de exclusão sem apagar trilha histórica.
+- Consultas com controle de acesso e/ou provas de conhecimento zero MAY reduzir exposição de dados mantendo verificabilidade.
+
+---
+
 ## Appendix A — Glossário
 
 - **Chip** (§5): unidade atômica de intenção/ação no protocolo.
