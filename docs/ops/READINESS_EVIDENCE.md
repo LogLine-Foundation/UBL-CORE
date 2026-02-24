@@ -1,6 +1,6 @@
 # LAB 512 Readiness Evidence Log
 
-Last updated: 2026-02-24T03:12:14Z
+Last updated: 2026-02-24T03:12:52Z
 
 ## Phase 3 — Bootstrap Pipeline Hardening
 
@@ -51,6 +51,12 @@ Last updated: 2026-02-24T03:12:14Z
 - Phase 1 doc scan (topology, canary/dual-plane, handoff, failure/rollback).
   - Command: `bash -lc 'set -euo pipefail; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ); out=/Users/ubl-ops/UBL-CORE/artifacts/readiness/2026-02-24_phase1_review.txt; mkdir -p /Users/ubl-ops/UBL-CORE/artifacts/readiness; { echo "Timestamp (UTC): $ts"; echo "PWD: $(pwd)"; echo; echo "## Topology references"; rg -n "control plane|data plane|topology" /Users/ubl-ops/UBL-CORE/docs/ops || true; echo; echo "## EPISODE_1_PROTOCOL.md (1-80)"; sed -n "1,80p" /Users/ubl-ops/UBL-CORE/docs/ops/EPISODE_1_PROTOCOL.md; echo; echo "## Canary/dual-plane references"; rg -n "canary|dual-plane" /Users/ubl-ops/UBL-CORE/docs/ops || true; echo; echo "## BOOTSTRAP_FINAL_TEXT.md (20-200)"; sed -n "20,200p" /Users/ubl-ops/UBL-CORE/docs/ops/BOOTSTRAP_FINAL_TEXT.md; echo; echo "## Handoff/replication references"; rg -n "handoff|replic|sync" /Users/ubl-ops/UBL-CORE/docs/ops || true; echo; echo "## Failure/rollback references"; rg -n "failure|rollback|recover" /Users/ubl-ops/UBL-CORE/docs/ops || true; } > "$out"; echo "$out"'`
   - Evidence: `/Users/ubl-ops/UBL-CORE/artifacts/readiness/2026-02-24_phase1_review.txt`.
+
+## Phase 2 — Security and Identity Ceremony
+
+- Phase 2 doc scan (ceremony, trust anchors, identity, break-glass, secret handling).
+  - Command: `bash -lc 'set -euo pipefail; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ); out=/Users/ubl-ops/UBL-CORE/artifacts/readiness/2026-02-24_phase2_review.txt; mkdir -p /Users/ubl-ops/UBL-CORE/artifacts/readiness; { echo "Timestamp (UTC): $ts"; echo "PWD: $(pwd)"; echo; echo "## Ceremony/key birth references"; rg -n "ceremony|key birth|machine birth" /Users/ubl-ops/UBL-CORE/docs/ops || true; echo; echo "## Trust anchor/attestation references"; rg -n "trust anchor|attestation" /Users/ubl-ops/UBL-CORE/docs/ops || true; echo; echo "## Authorship/identity/ingress references"; rg -n "authorship|identity|ingress" /Users/ubl-ops/UBL-CORE/docs/ops || true; echo; echo "## Break-glass/operator/admin references"; rg -n "break-glass|operator/admin" /Users/ubl-ops/UBL-CORE/docs/ops || true; echo; echo "## Secret handling/leak references"; rg -n "secret|leak|artifact" /Users/ubl-ops/UBL-CORE/docs/ops || true; } > "$out"; echo "$out"'`
+  - Evidence: `/Users/ubl-ops/UBL-CORE/artifacts/readiness/2026-02-24_phase2_review.txt`.
 
 ## Phase 0-6 — Blocker Assessment Snapshot (LAB 256-safe)
 

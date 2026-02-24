@@ -91,20 +91,20 @@ Parallel execution program: `docs/ops/WASM_RUNTIME_HARDENING_TASKLIST.md` (WASM 
 ## Phase 2 — Security and Identity Ceremony
 
 - [ ] Finalize key ceremony checklist for LAB 512 (machine birth + key birth).
-  - Blocker: No checklist draft is present for operator review.
-  - Next: `rg -n "ceremony|key birth|machine birth" /Users/ubl-ops/UBL-CORE/docs/ops` before drafting checklist.
+  - Blocker: Only scattered references (e.g., `docs/ops/FOREVER_BOOTSTRAP.md` key birth path) exist; no checklist draft is present for operator review.
+  - Next: `rg -n "ceremony|key birth|machine birth" /Users/ubl-ops/UBL-CORE/docs/ops` then draft checklist for operator review.
 - [ ] Confirm signer trust anchors and attestation pinning strategy.
-  - Blocker: Trust anchor list and pinning strategy are not documented.
-  - Next: `rg -n "trust anchor|attestation" /Users/ubl-ops/UBL-CORE/docs/ops` before drafting the strategy.
+  - Blocker: Trust anchor references exist in `docs/ops/FOREVER_BOOTSTRAP.md`, but no consolidated pinning strategy doc is present.
+  - Next: `rg -n "trust anchor|attestation" /Users/ubl-ops/UBL-CORE/docs/ops` then draft pinning strategy for operator approval.
 - [ ] Confirm subject/authorship identity policy for ingress.
-  - Blocker: Identity/authorship policy for ingress is not documented.
-  - Next: `rg -n "authorship|identity|ingress" /Users/ubl-ops/UBL-CORE/docs/ops` before drafting the policy.
+  - Blocker: Identity policy fields exist in Episode 1 specs, but no ops-level ingress/authorship policy doc is defined.
+  - Next: `rg -n "authorship|identity|ingress" /Users/ubl-ops/UBL-CORE/docs/ops` then draft ingress identity policy for approval.
 - [ ] Confirm break-glass policy and operator/admin separation.
-  - Blocker: Break-glass and operator/admin separation policy is not documented.
-  - Next: `rg -n "break-glass|operator/admin" /Users/ubl-ops/UBL-CORE/docs/ops` before drafting the policy.
+  - Blocker: Break-glass references exist across `docs/ops/HOST_LOCKDOWN_AND_CLEANUP.md` and `docs/ops/MCP_RUNTIME_VALIDATION.md`, but no consolidated policy doc exists.
+  - Next: `rg -n "break-glass|operator/admin" /Users/ubl-ops/UBL-CORE/docs/ops` then draft break-glass policy for approval.
 - [ ] Validate secret handling defaults (no runtime secret leakage in artifacts).
-  - Blocker: No documented validation run or checklist for secret handling defaults.
-  - Next: `rg -n "secret|leak|artifact" /Users/ubl-ops/UBL-CORE/docs/ops` before drafting validation steps.
+  - Blocker: Secret handling references exist in `docs/ops/FOREVER_BOOTSTRAP.md` and other docs, but no explicit validation run/checklist is documented.
+  - Next: `rg -n "secret|leak|artifact" /Users/ubl-ops/UBL-CORE/docs/ops` then draft validation checklist for approval.
 
 ---
 
