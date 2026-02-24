@@ -2,7 +2,7 @@
 
 **Status**: active  
 **Owner**: Repo Maintainer  
-**Last reviewed**: 2026-02-21
+**Last reviewed**: 2026-02-22
 
 ## Objective
 
@@ -38,9 +38,38 @@ Rules:
 
 ## Release and Change Flow
 
-1. `UBL-CORE` changes land on `main`.
-2. Core tags (`v*`) produce candidate releases and can be promoted to official releases.
-3. `UBL-SHELLS` consumes updated core by git dependency updates and CI validation.
+1. `UBL-CORE` changes land on `main` only when they are core-level changes (protocol, security, conformance, compatibility, or critical performance/runtime fixes).
+2. Product features and product UX/API flows should be implemented in shell/product repositories, not in `UBL-CORE`.
+3. Core tags (`v*`) produce candidate releases and can be promoted to official releases.
+4. `UBL-SHELLS` consumes updated core by git dependency updates and CI validation.
+
+## Core Change Cadence
+
+- During stabilization, `UBL-CORE` can change frequently.
+- After baseline stabilization, `UBL-CORE` should move to controlled/episodic updates, not daily product iteration.
+- Default operating mode:
+  - `UBL-CORE`: conservative, high-rigor changes.
+  - Product repos: rapid iteration on app-specific behavior.
+
+## CI/CD Profiles
+
+Two operational profiles are valid:
+
+1. `public_core` (for OSS trust-facing core):
+   - source of truth in Gitea
+   - mirror to GitHub before publish
+   - GitHub Actions for public gates/releases/attestation
+   - signed source bundle to S3
+   - deploy from S3
+   - UBL receipts for publish/deploy events
+2. `private_product` (for non-public product repos):
+   - source of truth in Gitea
+   - no mandatory GitHub mirror
+   - signed source bundle to S3
+   - deploy from S3
+   - UBL receipts for publish/deploy events
+
+Operational runbook: `docs/ops/GITEA_SOURCE_FLOW.md`.
 
 ## Economic Model Boundary
 

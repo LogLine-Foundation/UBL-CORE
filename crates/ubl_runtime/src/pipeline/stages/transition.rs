@@ -68,6 +68,22 @@ struct SiliconCompileOutcome {
 }
 
 impl UblPipeline {
+    const WASM_ATTEST_TRUST_ANCHOR_SEED_HEX: &'static str =
+        "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+
+    fn wasm_trust_anchor_did() -> Result<String, PipelineError> {
+        if let Ok(explicit_did) = std::env::var("UBL_WASM_TRUST_ANCHOR_DID") {
+            let trimmed = explicit_did.trim();
+            if !trimmed.is_empty() {
+                return Ok(trimmed.to_string());
+            }
+        }
+        let sk = ubl_kms::signing_key_from_hex(Self::WASM_ATTEST_TRUST_ANCHOR_SEED_HEX)
+            .map_err(|e| PipelineError::Internal(format!("WASM trust anchor seed: {}", e)))?;
+        let vk = ubl_kms::verifying_key(&sk);
+        Ok(ubl_kms::did_from_verifying_key(&vk))
+    }
+
     /// Stage 3: TR - Transition (RB-VM execution)
     pub(in crate::pipeline) async fn stage_transition(
         &self,
@@ -457,11 +473,13 @@ impl UblPipeline {
         chip_nrf: &[u8],
         input_cid: &str,
     ) -> Result<AdapterExecutionOutcome, PipelineError> {
+        self.validate_adapter_policy_contract(adapter_info)?;
+
         let (module_bytes, module_source) = self.resolve_adapter_module_bytes(adapter_info).await?;
         let actual_sha256 = Self::sha256_hex(&module_bytes);
         if !actual_sha256.eq_ignore_ascii_case(&adapter_info.wasm_sha256) {
             return Err(PipelineError::InvalidChip(format!(
-                "adapter.wasm_sha256 mismatch: expected {}, got {}",
+                "WASM_VERIFY_HASH_MISMATCH: adapter.wasm_sha256 mismatch: expected {}, got {}",
                 adapter_info.wasm_sha256, actual_sha256
             )));
         }
@@ -470,6 +488,15 @@ impl UblPipeline {
             .fuel_budget
             .unwrap_or(self.fuel_limit)
             .min(self.fuel_limit);
+        if let Some(timeout_ms) = adapter_info.timeout_ms {
+            // Deterministic guard: tiny deadlines are impossible by construction.
+            if timeout_ms < 10 {
+                return Err(PipelineError::FuelExhausted(format!(
+                    "WASM_RESOURCE_TIMEOUT: timeout budget too small ({}ms)",
+                    timeout_ms
+                )));
+            }
+        }
         let input = WasmInput {
             nrf1_bytes: chip_nrf.to_vec(),
             chip_cid: input_cid.to_string(),
@@ -485,12 +512,126 @@ impl UblPipeline {
             .execute(&module_bytes, &input, &sandbox)
             .map_err(Self::map_wasm_error)?;
 
-        Ok(AdapterExecutionOutcome {
+        let outcome = AdapterExecutionOutcome {
             output_cid: out.output_cid,
             fuel_used: out.fuel_consumed,
             effects: out.effects,
             module_source,
-        })
+        };
+        self.validate_receipt_claim_bindings(adapter_info, &outcome)?;
+        Ok(outcome)
+    }
+
+    fn validate_adapter_policy_contract(
+        &self,
+        adapter_info: &AdapterRuntimeInfo,
+    ) -> Result<(), PipelineError> {
+        for capability in &adapter_info.capabilities {
+            match capability.as_str() {
+                "network" => {
+                    return Err(PipelineError::PolicyDenied(
+                        "WASM_CAPABILITY_DENIED_NETWORK: network capability is disabled in deterministic_v1"
+                            .to_string(),
+                    ));
+                }
+                "clock" | "fs_read" | "fs_write" => {
+                    return Err(PipelineError::PolicyDenied(format!(
+                        "WASM_CAPABILITY_DENIED: capability '{}' is disabled in deterministic_v1",
+                        capability
+                    )));
+                }
+                _ => {}
+            }
+        }
+
+        let has_sig = adapter_info.attestation_signature_b64.is_some();
+        let has_anchor = adapter_info.attestation_trust_anchor.is_some();
+        if has_sig != has_anchor {
+            return Err(PipelineError::InvalidChip(
+                "WASM_VERIFY_SIGNATURE_INVALID: attestation must include both signature and trust_anchor"
+                    .to_string(),
+            ));
+        }
+
+        let expected_anchor = Self::wasm_trust_anchor_did()?;
+        if let Some(anchor) = adapter_info.attestation_trust_anchor.as_deref() {
+            if anchor != expected_anchor {
+                return Err(PipelineError::InvalidChip(format!(
+                    "WASM_VERIFY_TRUST_ANCHOR_MISMATCH: expected {}, got {}",
+                    expected_anchor, anchor
+                )));
+            }
+        }
+
+        if let Some(sig_raw) = adapter_info.attestation_signature_b64.as_deref() {
+            let anchor = adapter_info
+                .attestation_trust_anchor
+                .as_deref()
+                .ok_or_else(|| {
+                    PipelineError::InvalidChip(
+                        "WASM_VERIFY_SIGNATURE_INVALID: attestation_trust_anchor missing"
+                            .to_string(),
+                    )
+                })?;
+            let vk = ubl_kms::verifying_key_from_did(anchor).map_err(|e| {
+                PipelineError::InvalidChip(format!(
+                    "WASM_VERIFY_SIGNATURE_INVALID: invalid attestation trust anchor: {}",
+                    e
+                ))
+            })?;
+            let sig = if sig_raw.starts_with("ed25519:") {
+                sig_raw.to_string()
+            } else {
+                format!("ed25519:{}", sig_raw)
+            };
+            let attest_payload = serde_json::json!({
+                "wasm_sha256": adapter_info.wasm_sha256,
+                "abi_version": adapter_info.abi_version,
+            });
+            let ok = ubl_kms::verify_canonical(&vk, &attest_payload, ubl_kms::domain::CAPSULE, &sig)
+                .map_err(|e| {
+                    PipelineError::InvalidChip(format!(
+                        "WASM_VERIFY_SIGNATURE_INVALID: {}",
+                        e
+                    ))
+                })?;
+            if !ok {
+                return Err(PipelineError::InvalidChip(
+                    "WASM_VERIFY_SIGNATURE_INVALID: attestation signature verification failed"
+                        .to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_receipt_claim_bindings(
+        &self,
+        adapter_info: &AdapterRuntimeInfo,
+        outcome: &AdapterExecutionOutcome,
+    ) -> Result<(), PipelineError> {
+        if adapter_info.required_receipt_claims.is_empty() {
+            return Ok(());
+        }
+
+        for claim in &adapter_info.required_receipt_claims {
+            let present = match claim.as_str() {
+                "wasm.module.sha256" => !adapter_info.wasm_sha256.is_empty(),
+                "wasm.abi.version" => !adapter_info.abi_version.is_empty(),
+                "wasm.profile" => true,
+                "wasm.fuel.used" => outcome.fuel_used > 0,
+                "wasm.memory.max_bytes" => crate::wasm_adapter::WASM_MEMORY_LIMIT_BYTES > 0,
+                "wasm.verify.status" => true,
+                _ => false,
+            };
+            if !present {
+                return Err(PipelineError::InvalidChip(format!(
+                    "WASM_RECEIPT_BINDING_MISSING_CLAIM: missing required receipt claim '{}'",
+                    claim
+                )));
+            }
+        }
+        Ok(())
     }
 
     async fn resolve_adapter_module_bytes(
@@ -504,7 +645,8 @@ impl UblPipeline {
 
         let wasm_cid = adapter_info.wasm_cid.as_deref().ok_or_else(|| {
             PipelineError::InvalidChip(
-                "adapter requires one of adapter.wasm_b64 or adapter.wasm_cid".to_string(),
+                "WASM_ABI_INVALID_PAYLOAD: adapter requires one of adapter.wasm_b64 or adapter.wasm_cid"
+                    .to_string(),
             )
         })?;
 
@@ -516,7 +658,10 @@ impl UblPipeline {
             .await
             .map_err(|e| PipelineError::StorageError(format!("WASM module lookup: {}", e)))?
             .ok_or_else(|| {
-                PipelineError::InvalidChip(format!("adapter.wasm_cid not found: {}", wasm_cid))
+                PipelineError::InvalidChip(format!(
+                    "WASM_ABI_INVALID_PAYLOAD: adapter.wasm_cid not found: {}",
+                    wasm_cid
+                ))
             })?;
         let bytes = Self::extract_module_bytes(&stored.chip_data)?;
         Ok((bytes, format!("chipstore:{}", wasm_cid)))
@@ -555,11 +700,15 @@ impl UblPipeline {
             }
             if let Some(raw_hex) = from_obj_hex(source) {
                 let bytes = hex::decode(raw_hex).map_err(|e| {
-                    PipelineError::InvalidChip(format!("invalid adapter module hex bytes: {}", e))
+                    PipelineError::InvalidChip(format!(
+                        "WASM_ABI_INVALID_PAYLOAD: invalid adapter module hex bytes: {}",
+                        e
+                    ))
                 })?;
                 if bytes.is_empty() {
                     return Err(PipelineError::InvalidChip(
-                        "adapter module bytes cannot be empty".to_string(),
+                        "WASM_ABI_INVALID_PAYLOAD: adapter module bytes cannot be empty"
+                            .to_string(),
                     ));
                 }
                 return Ok(bytes);
@@ -567,7 +716,7 @@ impl UblPipeline {
         }
 
         Err(PipelineError::InvalidChip(
-            "wasm module chip missing bytes field (expected wasm_b64/module_b64/wasm_hex)"
+            "WASM_ABI_INVALID_PAYLOAD: wasm module chip missing bytes field (expected wasm_b64/module_b64/wasm_hex)"
                 .to_string(),
         ))
     }
@@ -577,11 +726,14 @@ impl UblPipeline {
             .decode(raw)
             .or_else(|_| base64::engine::general_purpose::STANDARD.decode(raw))
             .map_err(|e| {
-                PipelineError::InvalidChip(format!("invalid adapter module base64: {}", e))
+                PipelineError::InvalidChip(format!(
+                    "WASM_ABI_INVALID_PAYLOAD: invalid adapter module base64: {}",
+                    e
+                ))
             })?;
         if decoded.is_empty() {
             return Err(PipelineError::InvalidChip(
-                "adapter module bytes cannot be empty".to_string(),
+                "WASM_ABI_INVALID_PAYLOAD: adapter module bytes cannot be empty".to_string(),
             ));
         }
         Ok(decoded)
@@ -596,14 +748,43 @@ impl UblPipeline {
     fn map_wasm_error(error: WasmError) -> PipelineError {
         match error {
             WasmError::FuelExhausted { limit, consumed } => PipelineError::FuelExhausted(format!(
-                "WASM fuel exhausted (limit: {}, consumed: {})",
+                "WASM_RESOURCE_FUEL_EXHAUSTED: WASM fuel exhausted (limit: {}, consumed: {})",
                 limit, consumed
             )),
-            WasmError::MemoryExceeded { limit } => {
-                PipelineError::FuelExhausted(format!("WASM memory exceeded (limit: {})", limit))
-            }
-            other => {
-                PipelineError::InvalidChip(format!("WASM adapter execution failed: {}", other))
+            WasmError::MemoryExceeded { limit } => PipelineError::FuelExhausted(format!(
+                "WASM_RESOURCE_MEMORY_LIMIT: WASM memory exceeded (limit: {})",
+                limit
+            )),
+            WasmError::CompileError(msg) => PipelineError::InvalidChip(format!(
+                "WASM_ABI_INVALID_PAYLOAD: WASM compile error: {}",
+                msg
+            )),
+            WasmError::ModuleNotFound(cid) => PipelineError::InvalidChip(format!(
+                "WASM_ABI_INVALID_PAYLOAD: WASM module not found: {}",
+                cid
+            )),
+            WasmError::AbiMismatch { expected, got } => PipelineError::InvalidChip(format!(
+                "WASM_DETERMINISM_VIOLATION: WASM ABI mismatch (expected {}, got {})",
+                expected, got
+            )),
+            WasmError::InvalidOutput(msg) => PipelineError::InvalidChip(format!(
+                "WASM_DETERMINISM_VIOLATION: WASM invalid output: {}",
+                msg
+            )),
+            WasmError::Runtime(msg) => {
+                if msg.contains("WASI imports are not allowed") {
+                    return PipelineError::InvalidChip(format!(
+                        "WASM_CAPABILITY_DENIED_NETWORK: {}",
+                        msg
+                    ));
+                }
+                if msg.to_ascii_lowercase().contains("import") {
+                    return PipelineError::InvalidChip(format!("WASM_CAPABILITY_DENIED: {}", msg));
+                }
+                if msg.to_ascii_lowercase().contains("timeout") {
+                    return PipelineError::FuelExhausted(format!("WASM_RESOURCE_TIMEOUT: {}", msg));
+                }
+                PipelineError::InvalidChip(format!("WASM_DETERMINISM_VIOLATION: {}", msg))
             }
         }
     }

@@ -7,6 +7,11 @@ pub(super) struct AdapterRuntimeInfo {
     pub(super) wasm_cid: Option<String>,
     pub(super) wasm_b64: Option<String>,
     pub(super) fuel_budget: Option<u64>,
+    pub(super) timeout_ms: Option<u64>,
+    pub(super) capabilities: Vec<String>,
+    pub(super) attestation_signature_b64: Option<String>,
+    pub(super) attestation_trust_anchor: Option<String>,
+    pub(super) required_receipt_claims: Vec<String>,
 }
 
 impl AdapterRuntimeInfo {
@@ -14,18 +19,28 @@ impl AdapterRuntimeInfo {
         let Some(adapter) = body.get("adapter") else {
             return Ok(None);
         };
-        let adapter = adapter
-            .as_object()
-            .ok_or_else(|| PipelineError::InvalidChip("adapter must be object".to_string()))?;
+        let adapter = adapter.as_object().ok_or_else(|| {
+            PipelineError::InvalidChip(
+                "WASM_ABI_INVALID_PAYLOAD: adapter must be object".to_string(),
+            )
+        })?;
 
         let wasm_sha256 = adapter
             .get("wasm_sha256")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| PipelineError::InvalidChip("adapter.wasm_sha256 missing".to_string()))?;
+            .ok_or_else(|| {
+                PipelineError::InvalidChip(
+                    "WASM_ABI_INVALID_PAYLOAD: adapter.wasm_sha256 missing".to_string(),
+                )
+            })?;
         let abi_version = adapter
             .get("abi_version")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| PipelineError::InvalidChip("adapter.abi_version missing".to_string()))?;
+            .ok_or_else(|| {
+                PipelineError::InvalidChip(
+                    "WASM_ABI_MISSING_VERSION: adapter.abi_version missing".to_string(),
+                )
+            })?;
         let wasm_cid = adapter
             .get("wasm_cid")
             .and_then(|v| v.as_str())
@@ -35,16 +50,43 @@ impl AdapterRuntimeInfo {
             .and_then(|v| v.as_str())
             .map(|v| v.to_string());
         let fuel_budget = adapter.get("fuel_budget").and_then(|v| v.as_u64());
+        let timeout_ms = adapter.get("timeout_ms").and_then(|v| v.as_u64());
+        let capabilities = adapter
+            .get("capabilities")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let attestation_signature_b64 = adapter
+            .get("attestation_signature_b64")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string());
+        let attestation_trust_anchor = adapter
+            .get("attestation_trust_anchor")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string());
+        let required_receipt_claims = adapter
+            .get("required_receipt_claims")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
 
         let is_hex = wasm_sha256.len() == 64 && wasm_sha256.chars().all(|c| c.is_ascii_hexdigit());
         if !is_hex {
             return Err(PipelineError::InvalidChip(
-                "adapter.wasm_sha256 must be 64 hex chars".to_string(),
+                "WASM_VERIFY_HASH_MISMATCH: adapter.wasm_sha256 must be 64 hex chars".to_string(),
             ));
         }
         if abi_version != "1.0" {
             return Err(PipelineError::InvalidChip(format!(
-                "adapter.abi_version unsupported: {}",
+                "WASM_ABI_UNSUPPORTED_VERSION: adapter.abi_version unsupported: {}",
                 abi_version
             )));
         }
@@ -55,6 +97,11 @@ impl AdapterRuntimeInfo {
             wasm_cid,
             wasm_b64,
             fuel_budget,
+            timeout_ms,
+            capabilities,
+            attestation_signature_b64,
+            attestation_trust_anchor,
+            required_receipt_claims,
         }))
     }
 }

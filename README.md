@@ -65,6 +65,7 @@ Process references:
 - Versioning policy: `VERSIONING.md`
 - Compatibility policy: `COMPATIBILITY.md`
 - OSS scope/boundary: `docs/oss/OPEN_SOURCE_SCOPE.md`
+- Trust charter: `docs/oss/LOGLINE_TRUST_CHARTER.md`
 - Contributing: `CONTRIBUTING.md`
 - Code of conduct: `CODE_OF_CONDUCT.md`
 - Support policy: `SUPPORT.md`
@@ -72,6 +73,8 @@ Process references:
 - Commercial model: `COMMERCIAL-LICENSING.md`
 - Docs attestation: `docs/security/DOC_ATTESTATION.md`
 - Forever host bootstrap runbook: `docs/ops/FOREVER_BOOTSTRAP.md`
+- Gitea + S3 signed source flow: `docs/ops/GITEA_SOURCE_FLOW.md`
+- MCP runtime validation: `docs/ops/MCP_RUNTIME_VALIDATION.md`
 - Cloudflare edge baseline: `docs/ops/CLOUDFLARE_EDGE_BASELINE.md`
 - Host lockdown and cleanup: `docs/ops/HOST_LOCKDOWN_AND_CLEANUP.md`
 - Key rotation plan: `docs/key_rotation_plan.md`

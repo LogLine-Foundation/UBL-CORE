@@ -43,6 +43,34 @@ pub enum ErrorCode {
     #[serde(rename = "DEPENDENCY_MISSING")]
     DependencyMissing,
 
+    // WASM canonical conformance errors (produce DENY receipt)
+    #[serde(rename = "WASM_ABI_MISSING_VERSION")]
+    WasmAbiMissingVersion,
+    #[serde(rename = "WASM_ABI_UNSUPPORTED_VERSION")]
+    WasmAbiUnsupportedVersion,
+    #[serde(rename = "WASM_ABI_INVALID_PAYLOAD")]
+    WasmAbiInvalidPayload,
+    #[serde(rename = "WASM_VERIFY_HASH_MISMATCH")]
+    WasmVerifyHashMismatch,
+    #[serde(rename = "WASM_VERIFY_SIGNATURE_INVALID")]
+    WasmVerifySignatureInvalid,
+    #[serde(rename = "WASM_VERIFY_TRUST_ANCHOR_MISMATCH")]
+    WasmVerifyTrustAnchorMismatch,
+    #[serde(rename = "WASM_CAPABILITY_DENIED")]
+    WasmCapabilityDenied,
+    #[serde(rename = "WASM_CAPABILITY_DENIED_NETWORK")]
+    WasmCapabilityDeniedNetwork,
+    #[serde(rename = "WASM_DETERMINISM_VIOLATION")]
+    WasmDeterminismViolation,
+    #[serde(rename = "WASM_RESOURCE_FUEL_EXHAUSTED")]
+    WasmResourceFuelExhausted,
+    #[serde(rename = "WASM_RESOURCE_MEMORY_LIMIT")]
+    WasmResourceMemoryLimit,
+    #[serde(rename = "WASM_RESOURCE_TIMEOUT")]
+    WasmResourceTimeout,
+    #[serde(rename = "WASM_RECEIPT_BINDING_MISSING_CLAIM")]
+    WasmReceiptBindingMissingClaim,
+
     // VM execution errors (produce DENY receipt)
     #[serde(rename = "FUEL_EXHAUSTED")]
     FuelExhausted,
@@ -112,6 +140,19 @@ impl ErrorCode {
             Self::ReplayDetected => 409,
             Self::InvalidChip => 422,
             Self::FuelExhausted => 422,
+            Self::WasmAbiMissingVersion => 422,
+            Self::WasmAbiUnsupportedVersion => 422,
+            Self::WasmAbiInvalidPayload => 422,
+            Self::WasmVerifyHashMismatch => 422,
+            Self::WasmVerifySignatureInvalid => 422,
+            Self::WasmVerifyTrustAnchorMismatch => 422,
+            Self::WasmCapabilityDenied => 403,
+            Self::WasmCapabilityDeniedNetwork => 403,
+            Self::WasmDeterminismViolation => 422,
+            Self::WasmResourceFuelExhausted => 422,
+            Self::WasmResourceMemoryLimit => 422,
+            Self::WasmResourceTimeout => 422,
+            Self::WasmReceiptBindingMissingClaim => 422,
             Self::TypeMismatch => 422,
             Self::StackUnderflow => 422,
             Self::CasNotFound => 422,
@@ -152,13 +193,26 @@ impl ErrorCode {
             | Self::InvalidChip
             | Self::CanonError
             | Self::FuelExhausted
+            | Self::WasmAbiMissingVersion
+            | Self::WasmAbiUnsupportedVersion
+            | Self::WasmAbiInvalidPayload
+            | Self::WasmVerifyHashMismatch
+            | Self::WasmVerifySignatureInvalid
+            | Self::WasmVerifyTrustAnchorMismatch
+            | Self::WasmDeterminismViolation
+            | Self::WasmResourceFuelExhausted
+            | Self::WasmResourceMemoryLimit
+            | Self::WasmResourceTimeout
+            | Self::WasmReceiptBindingMissingClaim
             | Self::TypeMismatch
             | Self::StackUnderflow
             | Self::CasNotFound => "BadInput",
             Self::InvalidSignature | Self::RuntimeHashMismatch => "BadInput",
 
             Self::Unauthorized | Self::SignError => "Unauthorized",
-            Self::PolicyDenied => "Forbidden",
+            Self::PolicyDenied | Self::WasmCapabilityDenied | Self::WasmCapabilityDeniedNetwork => {
+                "Forbidden"
+            }
             Self::NotFound | Self::DependencyMissing => "NotFound",
             Self::ReplayDetected | Self::IdempotencyConflict => "Conflict",
             Self::TamperDetected => "Conflict",
@@ -217,7 +271,13 @@ impl ErrorCode {
     pub fn is_vm_error(&self) -> bool {
         matches!(
             self,
-            Self::FuelExhausted | Self::TypeMismatch | Self::StackUnderflow | Self::CasNotFound
+            Self::FuelExhausted
+                | Self::WasmResourceFuelExhausted
+                | Self::WasmResourceMemoryLimit
+                | Self::WasmResourceTimeout
+                | Self::TypeMismatch
+                | Self::StackUnderflow
+                | Self::CasNotFound
         )
     }
 }
@@ -248,10 +308,19 @@ impl UblError {
                 let code = classify_knock_error(msg);
                 (code, msg.clone())
             }
-            PipelineError::PolicyDenied(msg) => (ErrorCode::PolicyDenied, msg.clone()),
-            PipelineError::InvalidChip(msg) => (ErrorCode::InvalidChip, msg.clone()),
+            PipelineError::PolicyDenied(msg) => (
+                classify_wasm_error(msg).unwrap_or(ErrorCode::PolicyDenied),
+                msg.clone(),
+            ),
+            PipelineError::InvalidChip(msg) => (
+                classify_wasm_error(msg).unwrap_or(ErrorCode::InvalidChip),
+                msg.clone(),
+            ),
             PipelineError::DependencyMissing(msg) => (ErrorCode::DependencyMissing, msg.clone()),
-            PipelineError::FuelExhausted(msg) => (ErrorCode::FuelExhausted, msg.clone()),
+            PipelineError::FuelExhausted(msg) => (
+                classify_wasm_error(msg).unwrap_or(ErrorCode::FuelExhausted),
+                msg.clone(),
+            ),
             PipelineError::TypeMismatch(msg) => (ErrorCode::TypeMismatch, msg.clone()),
             PipelineError::StackUnderflow(msg) => (ErrorCode::StackUnderflow, msg.clone()),
             PipelineError::CasNotFound(msg) => (ErrorCode::CasNotFound, msg.clone()),
@@ -323,6 +392,107 @@ fn classify_knock_error(msg: &str) -> ErrorCode {
     } else {
         ErrorCode::KnockInvalidUtf8 // fallback
     }
+}
+
+fn classify_wasm_error(msg: &str) -> Option<ErrorCode> {
+    let upper = msg.to_ascii_uppercase();
+    if upper.contains("WASM_ABI_MISSING_VERSION") {
+        return Some(ErrorCode::WasmAbiMissingVersion);
+    }
+    if upper.contains("WASM_ABI_UNSUPPORTED_VERSION") {
+        return Some(ErrorCode::WasmAbiUnsupportedVersion);
+    }
+    if upper.contains("WASM_ABI_INVALID_PAYLOAD") {
+        return Some(ErrorCode::WasmAbiInvalidPayload);
+    }
+    if upper.contains("WASM_VERIFY_HASH_MISMATCH") {
+        return Some(ErrorCode::WasmVerifyHashMismatch);
+    }
+    if upper.contains("WASM_VERIFY_SIGNATURE_INVALID") {
+        return Some(ErrorCode::WasmVerifySignatureInvalid);
+    }
+    if upper.contains("WASM_VERIFY_TRUST_ANCHOR_MISMATCH") {
+        return Some(ErrorCode::WasmVerifyTrustAnchorMismatch);
+    }
+    if upper.contains("WASM_CAPABILITY_DENIED_NETWORK") {
+        return Some(ErrorCode::WasmCapabilityDeniedNetwork);
+    }
+    if upper.contains("WASM_CAPABILITY_DENIED") {
+        return Some(ErrorCode::WasmCapabilityDenied);
+    }
+    if upper.contains("WASM_DETERMINISM_VIOLATION") {
+        return Some(ErrorCode::WasmDeterminismViolation);
+    }
+    if upper.contains("WASM_RESOURCE_FUEL_EXHAUSTED") {
+        return Some(ErrorCode::WasmResourceFuelExhausted);
+    }
+    if upper.contains("WASM_RESOURCE_MEMORY_LIMIT") {
+        return Some(ErrorCode::WasmResourceMemoryLimit);
+    }
+    if upper.contains("WASM_RESOURCE_TIMEOUT") {
+        return Some(ErrorCode::WasmResourceTimeout);
+    }
+    if upper.contains("WASM_RECEIPT_BINDING_MISSING_CLAIM") {
+        return Some(ErrorCode::WasmReceiptBindingMissingClaim);
+    }
+
+    let lower = msg.to_ascii_lowercase();
+    let wasm_context = lower.contains("wasm") || lower.contains("adapter.");
+    if !wasm_context {
+        return None;
+    }
+
+    if lower.contains("adapter.abi_version missing") {
+        return Some(ErrorCode::WasmAbiMissingVersion);
+    }
+    if lower.contains("adapter.abi_version unsupported") || lower.contains("wasm abi mismatch") {
+        return Some(ErrorCode::WasmAbiUnsupportedVersion);
+    }
+    if lower.contains("adapter.wasm_sha256 mismatch") {
+        return Some(ErrorCode::WasmVerifyHashMismatch);
+    }
+    if lower.contains("signature invalid") {
+        return Some(ErrorCode::WasmVerifySignatureInvalid);
+    }
+    if lower.contains("trust anchor mismatch") {
+        return Some(ErrorCode::WasmVerifyTrustAnchorMismatch);
+    }
+    if lower.contains("wasi imports are not allowed") {
+        return Some(ErrorCode::WasmCapabilityDeniedNetwork);
+    }
+    if lower.contains("unknown import") || lower.contains("imported function") {
+        return Some(ErrorCode::WasmCapabilityDenied);
+    }
+    if lower.contains("fuel exhausted") {
+        return Some(ErrorCode::WasmResourceFuelExhausted);
+    }
+    if lower.contains("memory exceeded") || lower.contains("memory limit") {
+        return Some(ErrorCode::WasmResourceMemoryLimit);
+    }
+    if lower.contains("timeout") {
+        return Some(ErrorCode::WasmResourceTimeout);
+    }
+    if lower.contains("missing required receipt claim") {
+        return Some(ErrorCode::WasmReceiptBindingMissingClaim);
+    }
+    if lower.contains("invalid adapter module base64")
+        || lower.contains("invalid adapter module hex bytes")
+        || lower.contains("adapter module bytes cannot be empty")
+        || lower.contains("adapter requires one of")
+        || lower.contains("adapter.wasm_cid not found")
+        || lower.contains("missing bytes field")
+        || lower.contains("adapter must be object")
+    {
+        return Some(ErrorCode::WasmAbiInvalidPayload);
+    }
+    if lower.contains("adapter execution failed")
+        || lower.contains("module must export linear memory")
+        || lower.contains("invalid output")
+    {
+        return Some(ErrorCode::WasmDeterminismViolation);
+    }
+
+    None
 }
 
 /// Generate a simple hex ID (not a real UUID, but unique enough for error IDs).
@@ -533,6 +703,9 @@ mod tests {
     fn all_vm_errors_are_422() {
         let vm_codes = [
             ErrorCode::FuelExhausted,
+            ErrorCode::WasmResourceFuelExhausted,
+            ErrorCode::WasmResourceMemoryLimit,
+            ErrorCode::WasmResourceTimeout,
             ErrorCode::TypeMismatch,
             ErrorCode::StackUnderflow,
             ErrorCode::CasNotFound,
@@ -549,6 +722,16 @@ mod tests {
         let non_vm = [
             ErrorCode::PolicyDenied,
             ErrorCode::InvalidChip,
+            ErrorCode::WasmAbiMissingVersion,
+            ErrorCode::WasmAbiUnsupportedVersion,
+            ErrorCode::WasmAbiInvalidPayload,
+            ErrorCode::WasmVerifyHashMismatch,
+            ErrorCode::WasmVerifySignatureInvalid,
+            ErrorCode::WasmVerifyTrustAnchorMismatch,
+            ErrorCode::WasmCapabilityDenied,
+            ErrorCode::WasmCapabilityDeniedNetwork,
+            ErrorCode::WasmDeterminismViolation,
+            ErrorCode::WasmReceiptBindingMissingClaim,
             ErrorCode::InternalError,
             ErrorCode::ReplayDetected,
             ErrorCode::KnockBodyTooLarge,
@@ -556,6 +739,49 @@ mod tests {
         for code in &non_vm {
             assert!(!code.is_vm_error(), "{:?} should NOT be VM error", code);
         }
+    }
+
+    #[test]
+    fn wasm_abi_missing_version_maps_to_canonical_code() {
+        let err = PipelineError::InvalidChip(
+            "WASM_ABI_MISSING_VERSION: adapter.abi_version missing".to_string(),
+        );
+        let ubl_err = UblError::from_pipeline_error(&err);
+        assert_eq!(ubl_err.code, ErrorCode::WasmAbiMissingVersion);
+        assert_eq!(ubl_err.code.http_status(), 422);
+        assert_eq!(ubl_err.code.category(), "BadInput");
+    }
+
+    #[test]
+    fn wasm_hash_mismatch_maps_to_canonical_code() {
+        let err = PipelineError::InvalidChip(
+            "WASM_VERIFY_HASH_MISMATCH: adapter.wasm_sha256 mismatch".to_string(),
+        );
+        let ubl_err = UblError::from_pipeline_error(&err);
+        assert_eq!(ubl_err.code, ErrorCode::WasmVerifyHashMismatch);
+        assert_eq!(ubl_err.code.http_status(), 422);
+    }
+
+    #[test]
+    fn wasm_capability_denied_network_maps_to_forbidden() {
+        let err = PipelineError::InvalidChip(
+            "WASM_CAPABILITY_DENIED_NETWORK: WASI imports are not allowed".to_string(),
+        );
+        let ubl_err = UblError::from_pipeline_error(&err);
+        assert_eq!(ubl_err.code, ErrorCode::WasmCapabilityDeniedNetwork);
+        assert_eq!(ubl_err.code.http_status(), 403);
+        assert_eq!(ubl_err.code.category(), "Forbidden");
+    }
+
+    #[test]
+    fn wasm_resource_fuel_maps_to_canonical_code() {
+        let err = PipelineError::FuelExhausted(
+            "WASM_RESOURCE_FUEL_EXHAUSTED: WASM fuel exhausted".to_string(),
+        );
+        let ubl_err = UblError::from_pipeline_error(&err);
+        assert_eq!(ubl_err.code, ErrorCode::WasmResourceFuelExhausted);
+        assert_eq!(ubl_err.code.http_status(), 422);
+        assert!(ubl_err.code.is_vm_error());
     }
 
     #[test]

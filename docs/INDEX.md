@@ -24,10 +24,15 @@ This is the entry point for all project documentation.
 | Environment/config flags | `docs/reference/README.md` + runtime/gate env reads in code | Runtime + Gate | Active |
 | Error taxonomy | `crates/ubl_runtime/src/error_response.rs` | Runtime | Active |
 | Test strategy (contract-first) | `TEST_STRATEGY.md` | Core Runtime | Active |
+| WASM runtime hardening tracker | `docs/ops/WASM_RUNTIME_HARDENING_TASKLIST.md` | Core Runtime | Active |
+| WASM execution spec pack | `docs/wasm/spec/README.md` | Core Runtime | Draft |
+| WASM conformance vectors and schema | `docs/wasm/conformance/README.md` | Core Runtime | Active |
 | Merge/release quality gates | `QUALITY_GATE.md` | Core Runtime + Ops | Active |
 | Crypto trust model | `SECURITY.md` | Security | Active |
 | Docs attestation flow | `docs/security/DOC_ATTESTATION.md` | Security | Active |
 | Forever host bootstrap runbook | `docs/ops/FOREVER_BOOTSTRAP.md` | Ops + Security | Active |
+| Gitea + S3 source flow | `docs/ops/GITEA_SOURCE_FLOW.md` | Ops + Security | Active |
+| MCP runtime validation | `docs/ops/MCP_RUNTIME_VALIDATION.md` | Core Runtime + Ops | Active |
 | Cloudflare edge baseline | `docs/ops/CLOUDFLARE_EDGE_BASELINE.md` | Ops + Security | Active |
 | Cloudflare tunnel go-live checklist | `docs/ops/CLOUDFLARE_TUNNEL_GO_LIVE.md` | Ops + Security | Active |
 | Host lockdown and cleanup | `docs/ops/HOST_LOCKDOWN_AND_CLEANUP.md` | Ops + Security | Active |
@@ -41,6 +46,7 @@ This is the entry point for all project documentation.
 | Release gates | `docs/lifecycle/RELEASE_READINESS.md` | Core Runtime + Ops | Active |
 | Change history | `docs/changelog/CHANGELOG.md` | Repo Maintainer | Active |
 | OSS scope and boundary | `docs/oss/OPEN_SOURCE_SCOPE.md` | Repo Maintainer | Active |
+| Trust product charter and receipt identity | `docs/oss/LOGLINE_TRUST_CHARTER.md` | LogLine Foundation | Active |
 | Contribution workflow | `CONTRIBUTING.md` | Repo Maintainer | Active |
 | Community conduct policy | `CODE_OF_CONDUCT.md` | Repo Maintainer | Active |
 | Support channels/policy | `SUPPORT.md` | Repo Maintainer | Active |
@@ -70,4 +76,7 @@ This is the entry point for all project documentation.
 10. `docs/lifecycle/RELEASE_READINESS.md`
 11. `TEST_STRATEGY.md`
 12. `QUALITY_GATE.md`
-13. `docs/oss/OPEN_SOURCE_SCOPE.md`
+13. `docs/ops/WASM_RUNTIME_HARDENING_TASKLIST.md`
+14. `docs/wasm/spec/README.md`
+15. `docs/wasm/conformance/README.md`
+16. `docs/oss/OPEN_SOURCE_SCOPE.md`

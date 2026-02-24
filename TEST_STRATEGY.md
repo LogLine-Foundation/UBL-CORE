@@ -32,6 +32,12 @@ Tests validate contracts, not code structure.
 - Run via `scripts/conformance_suite.sh`.
 - Output is a canonical report artifact (`JSON + Markdown + logs`).
 
+4. WASM conformance vectors (determinism and sandbox contract)
+- Target: ABI, capability, integrity, resource-guard, and receipt-binding compliance.
+- Run via `scripts/wasm_conformance.sh`.
+- Vector source: `docs/wasm/conformance/vectors/v1/`.
+- Output is a canonical report artifact (`JSON + Markdown`).
+
 ## Required Workflow (No Exceptions)
 
 1. Define contract or vector first.
@@ -74,4 +80,5 @@ Each PR changing behavior must include:
 ```bash
 bash scripts/contract_suite.sh --out-dir artifacts/contract
 bash scripts/conformance_suite.sh --out-dir artifacts/conformance
+bash scripts/wasm_conformance.sh --out-dir artifacts/wasm-conformance
 ```
