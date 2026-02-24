@@ -144,6 +144,7 @@ Recommended automation:
 - generate task chips from `TASKLIST.md`
 - submit through gate
 - capture receipt CIDs in `artifacts/tasks/`
+- bootstrap first lifecycle events with `scripts/task_orchestrate.sh`
 
 ## Mapping to Program Tasklist
 
