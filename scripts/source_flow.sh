@@ -59,19 +59,33 @@ run_ublx_submit() {
 
   if command -v "$SOURCE_UBLX_BIN" >/dev/null 2>&1; then
     if "$SOURCE_UBLX_BIN" submit --help >/dev/null 2>&1; then
-      "$SOURCE_UBLX_BIN" submit \
-        --input "$chip_file" \
-        --gate "$gate_url" \
-        --output "$response_file" >/dev/null
+      local -a cmd
+      cmd=(
+        "$SOURCE_UBLX_BIN" submit
+        --input "$chip_file"
+        --gate "$gate_url"
+        --output "$response_file"
+      )
+      if [[ -n "$SOURCE_GATE_API_KEY" ]]; then
+        cmd+=(--api-key "$SOURCE_GATE_API_KEY")
+      fi
+      "${cmd[@]}" >/dev/null
       return 0
     fi
   fi
 
   if [[ "$SOURCE_UBLX_CARGO_FALLBACK" == "true" ]]; then
-    (cd "$ROOT_DIR" && cargo run -q -p ubl_cli -- submit \
-      --input "$chip_file" \
-      --gate "$gate_url" \
-      --output "$response_file" >/dev/null)
+    local -a cargo_cmd
+    cargo_cmd=(
+      cargo run -q -p ubl_cli -- submit
+      --input "$chip_file"
+      --gate "$gate_url"
+      --output "$response_file"
+    )
+    if [[ -n "$SOURCE_GATE_API_KEY" ]]; then
+      cargo_cmd+=(--api-key "$SOURCE_GATE_API_KEY")
+    fi
+    (cd "$ROOT_DIR" && "${cargo_cmd[@]}" >/dev/null)
     return 0
   fi
 
@@ -858,6 +872,7 @@ SOURCE_S3_PREFIX="${SOURCE_S3_PREFIX:-repos}"
 SOURCE_REPO_NAMESPACE="${SOURCE_REPO_NAMESPACE:-logline}"
 SOURCE_GATE_URL="${SOURCE_GATE_URL:-http://127.0.0.1:4000}"
 SOURCE_WORLD="${SOURCE_WORLD:-a/chip-registry/t/logline}"
+SOURCE_GATE_API_KEY="${SOURCE_GATE_API_KEY:-}"
 SOURCE_EMIT_CHIP="${SOURCE_EMIT_CHIP:-true}"
 SOURCE_DEPLOY_ROOT="${SOURCE_DEPLOY_ROOT:-$HOME/srv/source-deploy}"
 SOURCE_DEPLOY_BUILD_CMD="${SOURCE_DEPLOY_BUILD_CMD:-}"

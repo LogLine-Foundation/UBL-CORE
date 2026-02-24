@@ -43,6 +43,10 @@ enum Commands {
         /// Optional path to write raw gate response JSON
         #[arg(short, long)]
         output: Option<String>,
+        /// Optional API key sent as X-API-Key for write-protected lanes
+        /// (fallback envs: SOURCE_GATE_API_KEY, UBL_GATE_API_KEY, UBL_API_KEY)
+        #[arg(long)]
+        api_key: Option<String>,
         /// HTTP timeout in seconds
         #[arg(long, default_value = "30")]
         timeout_secs: u64,
@@ -233,8 +237,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             input,
             gate,
             output,
+            api_key,
             timeout_secs,
-        } => cmd_submit(&input, &gate, output, timeout_secs).await?,
+        } => {
+            let resolved_api_key = api_key
+                .or_else(|| std::env::var("SOURCE_GATE_API_KEY").ok())
+                .or_else(|| std::env::var("UBL_GATE_API_KEY").ok())
+                .or_else(|| std::env::var("UBL_API_KEY").ok());
+            cmd_submit(
+                &input,
+                &gate,
+                output,
+                resolved_api_key.as_deref(),
+                timeout_secs,
+            )
+            .await?
+        }
         Commands::Explain { target } => cmd_explain(&target)?,
         Commands::Search {
             chip_type,
@@ -476,6 +494,7 @@ async fn cmd_submit(
     input: &str,
     gate: &str,
     output: Option<String>,
+    api_key: Option<&str>,
     timeout_secs: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let payload = std::fs::read(input)?;
@@ -485,12 +504,13 @@ async fn cmd_submit(
         .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()?;
 
-    let resp = client
+    let mut req = client
         .post(&endpoint)
-        .header("content-type", "application/json")
-        .body(payload)
-        .send()
-        .await?;
+        .header("content-type", "application/json");
+    if let Some(key) = api_key.map(str::trim).filter(|k| !k.is_empty()) {
+        req = req.header("X-API-Key", key);
+    }
+    let resp = req.body(payload).send().await?;
 
     let status = resp.status();
     let body_text = resp.text().await?;
