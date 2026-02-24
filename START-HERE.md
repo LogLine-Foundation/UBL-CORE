@@ -1,5 +1,7 @@
 # START-HERE (LLM + Human Operators)
 
+Primary LLM-first index: `docs/START-HERE-LLM-FIRST.md`
+
 If you change this repository, preserve canonical contracts first.
 
 ## Non-Negotiable Canonical Contracts

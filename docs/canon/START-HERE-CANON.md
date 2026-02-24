@@ -2,7 +2,10 @@
 
 Canonical quickstart for operators and contributors.
 
-For LLM-first onboarding, start in root:
+For LLM-first onboarding, start here:
+- `docs/START-HERE-LLM-FIRST.md`
+
+Then validate non-negotiables in root:
 - `START-HERE.md`
 
 ## Canon Entry Points
