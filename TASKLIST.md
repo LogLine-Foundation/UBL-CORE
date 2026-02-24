@@ -1,202 +1,376 @@
-# UBL-CORE — TASKLIST (LAB 512 Readiness)
+# UBL Program Tasklist v2 (Pragmática e Completa)
 
 **Status**: Active execution source of truth  
-**Date**: 2026-02-22  
-**Objective**: Prepare UBL-CORE for official, permanent bootstrap on LAB 512 with audit-grade evidence.
+**Owner**: Core Runtime + Platform Engineering  
+**Last reviewed**: 2026-02-24
 
-Previous tasklist archived at: `docs/archive/2026-02/TASKLIST_MASTER_ARCHIVE_2026-02-22.md`
+## Contexto real (decisão de programa)
 
-Parallel execution program: `docs/ops/WASM_RUNTIME_HARDENING_TASKLIST.md` (WASM runtime production hardening, spec/vector/DoD-first).
+Estado atual:
+- O repositório atual funciona, na prática, como `UBL-Plataforma-TESTE`.
 
----
+Estado alvo:
+- Extrair e congelar um `UBL-CORE` mínimo, estável e versionado (base compartilhada).
+- Derivar três produtos/contextos a partir do core:
+  - `UBL-Core-Mini` = core + particularidades de execução LLM/edge.
+  - `UBL-Pessoa` = core + particularidades de soberania pessoal.
+  - `UBL-Plataforma` = core + particularidades de coordenação coletiva/homeostase.
 
-## Operating Rules
-
-- Contract-first: behavior changes require contract tests first.
-- Conformance is mandatory for merge/promotion.
-- LAB 256 is rehearsal/integration environment.
-- LAB 512 is genesis/production historical environment.
-- No irreversible operation on LAB 512 without passing promotion gate.
-
----
-
-## Phase 0 — Baseline and Scope Lock
-
-- [ ] Confirm target branch/commit for LAB 512 promotion.
-  - Blocker: Operator has not confirmed the promotion target (branch/commit); current repo state captured in evidence artifact.
-  - Next: `cd /Users/ubl-ops/UBL-CORE && git rev-parse --abbrev-ref HEAD && git rev-parse HEAD` after operator approval.
-- [ ] Freeze scope for bootstrap v1 (what is in, what is out).
-  - Blocker: Scope boundary list has not been provided or approved by the operator.
-  - Next: `rg -n "Scope|Objective|In scope|Out of scope" /Users/ubl-ops/UBL-CORE/docs/ops` to draft scope text for approval.
-- [ ] Confirm that archived legacy tasklist is non-normative.
-  - Blocker: No explicit operator signoff recorded that the archived tasklist is non-normative.
-  - Next: `rg -n "Previous tasklist archived" /Users/ubl-ops/UBL-CORE/TASKLIST.md` before adding the explicit non-normative statement.
-- [ ] Publish this tasklist as canonical execution tracker.
-  - Blocker: Publication channel/target has not been specified (repo-only vs. external ops channel).
-  - Next: `git -C /Users/ubl-ops/UBL-CORE log -1 -- /Users/ubl-ops/UBL-CORE/TASKLIST.md` once the publication target is approved.
+Princípio de controle:
+- Nenhuma particularidade entra no `UBL-CORE`.
+- Toda quebra de compatibilidade exige versionamento + migração + evidência.
 
 ---
 
-## Phase 1 — Architecture Validation for LAB 512
+## Regras de operação
 
-- [ ] Define production topology with two UBL copies:
-  - control + ingestion plane
-  - data/serving plane
-  - Blocker: Small/Big plane references exist in `docs/ops/EPISODE_1_PROTOCOL.md` and `docs/ops/BOOTSTRAP_FINAL_TEXT.md`, but no explicit topology section is approved as normative.
-  - Next: `rg -n "control plane|data plane|topology" /Users/ubl-ops/UBL-CORE/docs/ops` then draft a topology section for operator approval.
-- [ ] Formalize Episode 1 protocol as normative contract (`docs/ops/EPISODE_1_PROTOCOL.md`).
-  - Blocker: `docs/ops/EPISODE_1_PROTOCOL.md` status remains "active"; no operator approval to mark it as a normative contract.
-  - Next: `sed -n '1,80p' /Users/ubl-ops/UBL-CORE/docs/ops/EPISODE_1_PROTOCOL.md` then update status line after operator approval.
-- [ ] Replace old canary concept with dual-plane validation protocol.
-  - Blocker: `docs/ops/PRODUCTION_SLICE_CANARY.md` still documents canary behavior; no dual-plane validation protocol doc exists yet.
-  - Next: `rg -n "canary|dual-plane" /Users/ubl-ops/UBL-CORE/docs/ops` then draft dual-plane validation protocol for approval.
-- [ ] Define control-plane responsibilities (ingest, governance, policy transitions, orchestration).
-  - Blocker: Responsibilities are described in `docs/ops/BOOTSTRAP_FINAL_TEXT.md` but not formalized as a normative contract section.
-  - Next: `sed -n '20,200p' /Users/ubl-ops/UBL-CORE/docs/ops/BOOTSTRAP_FINAL_TEXT.md` then formalize a control-plane contract section.
-- [ ] Define data-plane responsibilities (query/read APIs, receipts retrieval, CAS delivery, performance isolation).
-  - Blocker: Responsibilities are described in `docs/ops/BOOTSTRAP_FINAL_TEXT.md` but not formalized as a normative contract section.
-  - Next: `sed -n '20,200p' /Users/ubl-ops/UBL-CORE/docs/ops/BOOTSTRAP_FINAL_TEXT.md` then formalize a data-plane contract section.
-- [ ] Define deterministic handoff contract between planes (what is replicated, when, and how verified).
-  - Blocker: No dedicated handoff/replication contract doc found; references are scattered in specs/runbooks only.
-  - Next: `rg -n "handoff|replic|sync" /Users/ubl-ops/UBL-CORE/docs/ops` then draft a handoff contract section for approval.
-- [ ] Document failure modes and rollback paths per plane.
-  - Blocker: Failure/rollback references exist across specs/runbooks, but no per-plane rollback section is documented.
-  - Next: `rg -n "failure|rollback|recover" /Users/ubl-ops/UBL-CORE/docs/ops` then draft per-plane rollback paths for approval.
-- [x] Ingest Episode 1 prompt pack into a tracked implementation intake.
-  - Evidence: `/Users/ubl-ops/UBL-CORE/docs/ops/EPISODE_1_PROMPTS_INTAKE.md`.
-  - Note: Intake maps prompts 01..09 to spec outputs and defines execution order without replacing normative protocol text.
-- [x] Materialize spec-pack skeleton and first two specs (08 and 02).
-  - Evidence:
-    - `/Users/ubl-ops/UBL-CORE/docs/ops/episode-1/specs/README.md`
-    - `/Users/ubl-ops/UBL-CORE/docs/ops/episode-1/specs/SPEC_GOVERNANCE_YAML_AND_SCHEMAS_EP1.md`
-    - `/Users/ubl-ops/UBL-CORE/docs/ops/episode-1/specs/SPEC_WORKSPACE_E_SCHEMAS_EP1.md`
-- [x] Materialize hardening specs for GAP-6/15 and GAP-11.
-  - Evidence:
-    - `/Users/ubl-ops/UBL-CORE/docs/ops/episode-1/specs/SPEC_GAPS_6_15_EP1.md`
-    - `/Users/ubl-ops/UBL-CORE/docs/ops/episode-1/specs/SPEC_EVENTSTORE_AUDIT_GAP11.md`
-- [x] Materialize evidence specs for Lineage/PROV/OBS and Verifier.
-  - Evidence:
-    - `/Users/ubl-ops/UBL-CORE/docs/ops/episode-1/specs/SPEC_LINEAGE_PROV_OBS_EP1.md`
-    - `/Users/ubl-ops/UBL-CORE/docs/ops/episode-1/specs/SPEC_VERIFIER_EP1.md`
-- [x] Complete Episode 1 spec pack materialization (01..09).
-  - Evidence:
-    - `/Users/ubl-ops/UBL-CORE/docs/ops/episode-1/specs/SPEC_PLATFORM_MOCKS_EP1.md`
-    - `/Users/ubl-ops/UBL-CORE/docs/ops/episode-1/specs/SPEC_EPISODE_RUNNER_EP1.md`
-    - `/Users/ubl-ops/UBL-CORE/docs/ops/episode-1/specs/SPEC_IMPLEMENTACAO_EP1.md`
-
-**Note**: Additional input pending from operator (“vou trazer mais info”).
+- Contract-first: mudança de comportamento exige spec + teste de contrato + evidência no mesmo PR.
+- Core-first: estabilizar núcleo antes de acelerar variantes.
+- No bypass: mutação sempre via gate e pipeline canônico.
+- Evidence-first: tudo relevante precisa gerar receipt/auditoria verificável.
+- Honestidade operacional: lacunas ficam explícitas, com dono e critério de pronto.
+- Task orchestration is chip-native: use `docs/ops/TASK_ORCHESTRATION_PROTOCOL.md` + `schemas/task.lifecycle.event.v1.json` for lifecycle transitions and evidence.
 
 ---
 
-## Phase 2 — Security and Identity Ceremony
+## Critério global de sucesso (programa)
 
-- [ ] Finalize key ceremony checklist for LAB 512 (machine birth + key birth).
-  - Blocker: Only scattered references (e.g., `docs/ops/FOREVER_BOOTSTRAP.md` key birth path) exist; no checklist draft is present for operator review.
-  - Next: `rg -n "ceremony|key birth|machine birth" /Users/ubl-ops/UBL-CORE/docs/ops` then draft checklist for operator review.
-- [ ] Confirm signer trust anchors and attestation pinning strategy.
-  - Blocker: Trust anchor references exist in `docs/ops/FOREVER_BOOTSTRAP.md`, but no consolidated pinning strategy doc is present.
-  - Next: `rg -n "trust anchor|attestation" /Users/ubl-ops/UBL-CORE/docs/ops` then draft pinning strategy for operator approval.
-- [ ] Confirm subject/authorship identity policy for ingress.
-  - Blocker: Identity policy fields exist in Episode 1 specs, but no ops-level ingress/authorship policy doc is defined.
-  - Next: `rg -n "authorship|identity|ingress" /Users/ubl-ops/UBL-CORE/docs/ops` then draft ingress identity policy for approval.
-- [ ] Confirm break-glass policy and operator/admin separation.
-  - Blocker: Break-glass references exist across `docs/ops/HOST_LOCKDOWN_AND_CLEANUP.md` and `docs/ops/MCP_RUNTIME_VALIDATION.md`, but no consolidated policy doc exists.
-  - Next: `rg -n "break-glass|operator/admin" /Users/ubl-ops/UBL-CORE/docs/ops` then draft break-glass policy for approval.
-- [ ] Validate secret handling defaults (no runtime secret leakage in artifacts).
-  - Blocker: Secret handling references exist in `docs/ops/FOREVER_BOOTSTRAP.md` and other docs, but no explicit validation run/checklist is documented.
-  - Next: `rg -n "secret|leak|artifact" /Users/ubl-ops/UBL-CORE/docs/ops` then draft validation checklist for approval.
+- `UBL-CORE` definido por fronteira rígida, publicado e consumido por todos os derivados.
+- `UBL-Core-Mini`, `UBL-Pessoa` e `UBL-Plataforma` rodando sobre o mesmo contrato de core.
+- Busca/auditoria unificadas (fan-in dos stores) com resposta única e verificável.
+- LLM advisor pessoal e advisor de plataforma isolados por identidade/chaves/tokens/stores/logs.
+- LAB 512 com bootstrap oficial, evidência completa e rotina de operação estável.
 
 ---
 
-## Phase 3 — Bootstrap Pipeline Hardening
+## Orquestracao da Tasklist (imediato)
 
-- [x] Final review of `scripts/forever_bootstrap.sh` for LAB 512 execution path.
-- [x] Final review of `scripts/host_lockdown.sh` for service-user model (`ubl-service`).
-- [x] Final review of `scripts/workzone_cleanup.sh` for safe cleanup boundaries.
-- [x] Ensure final bundle generation/upload is mandatory where required.
-- [x] Ensure final local checks emit canonical report + receipt.
+### Objetivo
+Rodar a própria tasklist pelo pipeline UBL, com receipts em cada transição.
 
----
+### Itens
+- [ ] Ativar o protocolo `docs/ops/TASK_ORCHESTRATION_PROTOCOL.md`.
+- [ ] Validar schema `schemas/task.lifecycle.event.v1.json` no KNOCK.
+- [ ] Criar os primeiros chips para `L-01..L-05` com estado `open`.
+- [ ] Executar um ciclo completo (`open -> in_progress -> done`) com evidência real.
+- [ ] Publicar recibos em `artifacts/tasks/` e linkar no `TASKLIST.md`.
 
-## Phase 4 — Edge and Exposure Hardening (Cloudflare + DNS)
-
-- [ ] Confirm Cloudflare Access app/policy prerequisites.
-  - Blocker: Cloudflare Access policy prerequisites require account configuration review.
-  - Next: `sed -n '1,200p' /Users/ubl-ops/UBL-CORE/docs/ops/CLOUDFLARE_EDGE_BASELINE.md` before enumerating prerequisites.
-- [ ] Confirm tunnel + DNS automation path for:
-  - `ubl.agency` (public landing)
-  - `api.ubl.agency` (API/gate)
-  - `logline.world` (rich receipt URL model)
-  - Blocker: Tunnel/DNS automation path requires Cloudflare account access and existing tunnel IDs.
-  - Next: `sed -n '1,240p' /Users/ubl-ops/UBL-CORE/docs/ops/CLOUDFLARE_TUNNEL_GO_LIVE.md` before mapping automation steps.
-- [ ] Confirm edge rate limiting and registry of rule IDs.
-  - Blocker: Rule IDs registry not recorded; requires Cloudflare dashboard access.
-  - Next: `rg -n "rate limit|rule ID" /Users/ubl-ops/UBL-CORE/docs/ops` before drafting registry.
-- [ ] Confirm `/r#ubl:v1:<token>` remains the single public receipt model.
-  - Blocker: Requires operator confirmation that no alternate receipt URL model is approved.
-  - Next: `rg -n "receipt model|logline.world|/r#ubl:v1" /Users/ubl-ops/UBL-CORE/docs/ops` before asserting exclusivity.
+### DoD
+- 5 transições reais registradas como chips, cada uma com receipt CID.
 
 ---
 
-## Phase 5 — Quality Gates Before Promotion
+## Track 0 — Programa, naming e baseline
 
-- [x] `make contract` passes.
-- [x] `make conformance` passes.
-- [ ] CI `WF` gate passes with CONTRACT + CONFORMANCE.
-  - Blocker: Workflow exists (`.github/workflows/ci.yml`), but no CI run ID/output captured for the `WF` gate.
-  - Next: `gh run list --workflow ci.yml --limit 5` on a CI-authenticated host, then capture run ID + logs.
-- [ ] Reproducibility/attestation checks pass for target commit.
-  - Blocker: References to reproducibility/attestation exist (for example `docs/ops/FOREVER_BOOTSTRAP.md`), but no dedicated runbook or recorded check for the target commit is present.
-  - Next: `rg -n "reproducibility|attestation" /Users/ubl-ops/UBL-CORE/docs/ops` then draft a reproducibility/attestation runbook for approval.
-- [ ] Promotion checklist (`LAB 256 -> LAB 512`) signed off.
-  - Blocker: Promotion checklist document and signoff log not present in repo.
-  - Next: `rg -n "promotion checklist|LAB 256 -> LAB 512" /Users/ubl-ops/UBL-CORE/docs/ops` then draft checklist + signoff log template for approval.
+### Objetivo
+Fechar nomenclatura, escopo e governança para parar drift de linguagem e prioridade.
 
----
+### Itens
+- [ ] Ratificar naming oficial de trabalho:
+  - `UBL-Plataforma-TESTE` (estado atual)
+  - `UBL-CORE` (núcleo compartilhado)
+  - `UBL-Core-Mini` (derivado)
+  - `UBL-Pessoa` (derivado)
+  - `UBL-Plataforma` (derivado)
+- [ ] Publicar mapa de repositórios e ownership por contexto.
+- [ ] Definir branch/release policy por camada (core vs derivados).
+- [ ] Definir política de breaking change para core (quem aprova, como migra).
+- [ ] Fixar baseline de commit para início da extração.
 
-## Phase 6 — LAB 256 Full Rehearsal (No Exceptions)
-
-- [ ] Execute full bootstrap rehearsal from clean state.
-  - Blocker: LAB 256 access/run window not provided; rehearsal cannot be executed locally.
-  - Next: `ssh <LAB256_HOST> -- 'cd /opt/ubl/UBL-CORE && ./scripts/forever_bootstrap.sh'` once access is granted.
-- [ ] Validate all generated artifacts, receipts, and witnesses.
-  - Blocker: Rehearsal artifacts are not available without running the full bootstrap on LAB 256.
-  - Next: `ls -la /opt/ubl/UBL-CORE/artifacts` on LAB 256 after rehearsal completes.
-- [ ] Validate dual-plane behavior and deterministic sync/replication checks.
-  - Blocker: Requires LAB 256 dual-plane deployment and replication artifacts.
-  - Next: `rg -n "replication|sync" /opt/ubl/UBL-CORE/artifacts` on LAB 256 after rehearsal.
-- [ ] Run Episode 1 Small/Big acceptance test using the 12-line checklist in `docs/ops/EPISODE_1_PROTOCOL.md`.
-  - Blocker: Acceptance test requires LAB 256 Small/Big runtimes and recorded receipts.
-  - Next: `rg -n "Episode 1|acceptance" /opt/ubl/UBL-CORE/scripts /opt/ubl/UBL-CORE/docs/ops` to locate the runner on LAB 256.
-- [ ] Run incident drill and recovery simulation.
-  - Blocker: Incident drill requires LAB 256 orchestration and operator availability.
-  - Next: `rg -n "incident" /opt/ubl/UBL-CORE/scripts /opt/ubl/UBL-CORE/docs/ops/INCIDENT_RUNBOOK.md` on LAB 256 once scheduled.
-- [ ] Capture rehearsal evidence package for go/no-go decision.
-  - Blocker: Evidence package depends on completed rehearsal and artifact collection.
-  - Next: `tar -czf /opt/ubl/UBL-CORE/artifacts/rehearsal_evidence.tgz /opt/ubl/UBL-CORE/artifacts` on LAB 256.
+### DoD
+- Documento único de baseline aprovado e linkado em `docs/START-HERE-LLM-FIRST.md`.
 
 ---
 
-## Phase 7 — LAB 512 Official Bootstrap
+## Track 1 — Fronteira rígida do UBL-CORE
 
-- [ ] Execute approved bootstrap runbook.
-- [ ] Emit and preserve inaugural receipt artifacts.
-- [ ] Publish trust anchors and external witness.
-- [ ] Verify public endpoints and offline verification path.
-- [ ] Create freeze manifest and snapshot immediately after genesis.
+### Objetivo
+Definir exatamente o que pertence ao core e o que é extensão.
+
+### In-scope obrigatório do core
+- Envelope canônico (`@id`, `@type`, `@ver`, `@world`).
+- Canon determinístico (rho/NRF/CID/UNC-1).
+- Pipeline canônico (`KNOCK -> WA -> CHECK -> TR -> WF`).
+- Receipt mínimo canônico.
+- Contrato mínimo de AI Passport (identidade + limites + proveniência).
+- Erros canônicos e semântica de falha.
+
+### Itens
+- [ ] Publicar matriz `CORE vs EXTENSION` (linha por capability).
+- [ ] Definir `MUST NOT` explícitos para impedir poluição do core.
+- [ ] Fixar versão de contrato inicial (`core-contract-v1`).
+- [ ] Criar suite de conformance mínima obrigatória para qualquer derivado.
+
+### DoD
+- `CORE_BOUNDARY.md` aprovado + conformance mínima verde no CI.
 
 ---
 
-## Phase 8 — Post-Bootstrap Stabilization
+## Track 2 — Lacunas canônicas (cirúrgicas)
 
-- [ ] Enable scheduled heartbeat receipts.
-- [ ] Validate encrypted backup cycle from day 1.
-- [ ] Verify monitoring/dashboard/alerts baselines.
-- [ ] Record post-bootstrap operations note and open next tasklist cycle.
+### Objetivo
+Fechar gaps que impedem auditabilidade plena.
+
+### Itens
+- [ ] Especificação normativa legível de `NRF-1.1`.
+- [ ] Especificação semântica de `@world` (validação, escopo, interoperabilidade).
+- [ ] Entrada explícita de AI Passport no mapa canônico (`CANON-REFERENCE`).
+- [ ] Seção de composição entre `WASM_RECEIPT_BINDING_V1` e receipt canônico.
+- [ ] Endurecer `WASM_CAPABILITY_MODEL_V1` para `fs_read` escopado + mapeamento de erro.
+
+### DoD
+- Cada lacuna com: spec + ponteiro de código + evidência + índice atualizado.
 
 ---
 
-## Deferred / Not in This Cycle
+## Track 3 — Extração estrutural (de TESTE para CORE)
 
-- Product-shell feature expansion unrelated to LAB 512 readiness.
-- New protocol surfaces without direct impact on bootstrap integrity.
+### Objetivo
+Separar o que é núcleo do que é específico da plataforma atual.
+
+### Itens
+- [ ] Inventariar módulos atuais e classificar em `core`, `platform`, `shared-ext`, `legacy`.
+- [ ] Extrair contratos e tipos de core para pacote/crate dedicado.
+- [ ] Remover dependências circulares entre runtime e concerns de plataforma.
+- [ ] Criar camada de extensão oficial (`extensions/` ou crates de domínio).
+- [ ] Marcar componentes legados com plano de desativação.
+
+### DoD
+- Build do `UBL-CORE` sem depender de módulos platform-specific.
+
+---
+
+## Track 4 — Arquitetura de stores e auditoria unificada
+
+### Objetivo
+Parar a fragmentação operacional de consultas em múltiplas bases.
+
+### Itens
+- [ ] Documentar oficialmente os stores por contexto e papel (CAS/Event/Index/etc).
+- [ ] Definir contrato de `auditoria unificada` (entrada única, fan-in interno, saída única).
+- [ ] Implementar agregador de auditoria/search com reconciliação entre fontes.
+- [ ] Padronizar resposta com: CIDs, contexto, estado de reconciliação, lacunas de certeza.
+- [ ] Incluir rastreio de falha parcial de fonte (sem mascarar erro).
+
+### DoD
+- Um endpoint/comando único responde auditoria cross-store com prova verificável.
+
+---
+
+## Track 5 — LLM Engine e Advisors (pessoal vs plataforma)
+
+### Objetivo
+Implementar isolamento real entre agência pessoal e agência de plataforma.
+
+### Itens
+- [ ] Formalizar dois perfis de advisor:
+  - `advisor.personal`
+  - `advisor.platform`
+- [ ] Garantir passaportes distintos por perfil.
+- [ ] Garantir chaves/tokens/stores/logs segregados por perfil.
+- [ ] Bloquear runtime para impedir advisor fora do scope/role.
+- [ ] Definir hooks consultivos permitidos e proibidos por etapa do pipeline.
+- [ ] Registrar proposal/advisory sempre com referência a input/receipt origem.
+
+### DoD
+- Testes de contrato provando que um advisor não consegue agir no contexto do outro.
+
+---
+
+## Track 6 — UBL-Core-Mini
+
+### Objetivo
+Produzir variante leve para bolso do LLM/edge mantendo contrato do core.
+
+### Itens
+- [ ] Definir perfil mínimo de runtime (`mini-profile-v1`).
+- [ ] Definir dependências removíveis (sem quebrar invariantes).
+- [ ] Garantir conformance core em footprint reduzido.
+- [ ] Validar modo offline/degraded com receipts verificáveis.
+- [ ] Publicar guia de integração para LLM Engine local.
+
+### DoD
+- `UBL-Core-Mini` passa conformance core e roda cenário de referência.
+
+---
+
+## Track 7 — UBL-Pessoa
+
+### Objetivo
+Criar derivado pessoal com soberania por padrão.
+
+### Itens
+- [ ] Definir bootstrap de identidade pessoal (keys, did/passport, world).
+- [ ] Definir política local de privacidade e retenção.
+- [ ] Implementar gestão de secrets e credenciais pessoais com rotação.
+- [ ] Implementar comunicação federada com plataforma via chips/receipts.
+- [ ] Definir controles de consentimento para ações cross-contexto.
+
+### DoD
+- UBL-Pessoa opera de forma autônoma e interopera com plataforma sem perder soberania.
+
+---
+
+## Track 8 — UBL-Plataforma (produção)
+
+### Objetivo
+Levar o atual TESTE para plataforma oficial estabilizada.
+
+### Itens
+- [ ] Aplicar contrato final de core nas superfícies da plataforma.
+- [ ] Fechar protocolo de homeostase e conflito cross-contexto em runtime.
+- [ ] Implementar NOC com visão de evidência e reconciliação (não só métricas).
+- [ ] Fechar governança de policy e incidentes.
+- [ ] Endurecer operação pública (edge, rate-limit, receipt URL model único).
+
+### DoD
+- Plataforma oficial roda em produção com compliance do core e evidência contínua.
+
+---
+
+## Track 9 — App de observabilidade (UI de operação)
+
+### Objetivo
+Reduzir operação por terminal e expor controle confiável via UI.
+
+### Itens
+- [ ] Definir escopo MVP do app como NOC operacional da plataforma.
+- [ ] Integrar backend Rust (orquestração segura de CLI + APIs + WebSocket).
+- [ ] Entregar painéis mínimos:
+  - Home (health geral)
+  - Status de componentes
+  - Registry/Chips
+  - Auditoria unificada
+  - LLM Gateway status
+- [ ] Implementar modelo frente/verso com settings por painel/componente.
+- [ ] Garantir trilha auditável para toda ação iniciada na UI.
+
+### DoD
+- Fluxos críticos de operação executáveis sem terminal em rotina normal.
+
+---
+
+## Track 10 — Segurança operacional e cerimônias
+
+### Objetivo
+Fechar hardening de identidade, segredos e resposta a incidente.
+
+### Itens
+- [ ] Checklist de key ceremony (machine birth + key birth).
+- [ ] Política de trust anchors e attestation pinning.
+- [ ] Política de break-glass com trilha obrigatória.
+- [ ] Política de segregação operador/admin.
+- [ ] Validação de não vazamento de segredos em artifacts/logs.
+- [ ] Exercício de incidente com evidência e postmortem.
+
+### DoD
+- Pacote de segurança operacional aprovado e ensaiado.
+
+---
+
+## Track 11 — Qualidade, conformance e release
+
+### Objetivo
+Impedir regressão silenciosa e release sem prova.
+
+### Itens
+- [ ] CI WF verde com contract + conformance + invariantes.
+- [ ] Reproducibilidade/attestation para commit alvo.
+- [ ] Checklist de promoção LAB 256 -> LAB 512 com signoff.
+- [ ] Gate de release por contexto (core/mini/pessoa/plataforma).
+- [ ] Artefatos de evidência preservados por release.
+
+### DoD
+- Nenhuma promoção sem evidência executável anexada.
+
+---
+
+## Track 12 — LAB 256 rehearsal e LAB 512 bootstrap
+
+### Objetivo
+Executar caminho completo sem exceção manual.
+
+### Itens
+- [ ] Rehearsal completo em LAB 256 (clean bootstrap).
+- [ ] Validar receipts, witnesses e sincronização dual-plane.
+- [ ] Rodar teste de aceitação Episode 1 (Small/Big).
+- [ ] Rodar simulação de incidente + recuperação.
+- [ ] Capturar pacote de evidência para go/no-go.
+- [ ] Executar bootstrap oficial LAB 512.
+- [ ] Emitir receipt inaugural + trust anchors públicos.
+- [ ] Congelar snapshot de genesis.
+
+### DoD
+- LAB 512 operacional com trilha histórica verificável desde genesis.
+
+---
+
+## Track 13 — Pós-bootstrap e continuidade
+
+### Objetivo
+Transformar bootstrap em operação contínua confiável.
+
+### Itens
+- [ ] Heartbeat receipts agendados.
+- [ ] Backups criptografados com teste de restore.
+- [ ] Baseline de monitoramento e alertas revisado.
+- [ ] Revisão semanal de lacunas e débito arquitetural.
+- [ ] Abrir próximo ciclo com metas trimestrais.
+
+### DoD
+- Operação estável por 30 dias com incidentes tratados via protocolo.
+
+---
+
+## Ordem executiva (critical path)
+
+1. Track 0 (baseline e naming)
+2. Track 1 (fronteira do core)
+3. Track 2 (lacunas canônicas)
+4. Track 3 (extração estrutural)
+5. Track 10 (segurança operacional mínima)
+6. Track 11 (gates de qualidade/release)
+7. Track 12 (LAB 256 -> LAB 512)
+8. Track 13 (estabilização)
+9. Tracks 6/7/8 em paralelo controlado após core congelado
+10. Track 9 (app observabilidade) evolui em paralelo, sem furar contrato do core
+
+---
+
+## Matriz de dependências (resumo)
+
+- Track 6/7/8 dependem de Track 1 + 2 + 3.
+- Track 12 depende de Track 10 + 11.
+- Track 9 depende de Track 4 + 5 para fluxo de auditoria e advisor corretos.
+- Track 4 depende de definição de stores e contratos mínimos de receipt/canon.
+
+---
+
+## Backlog explícito de lacunas (L-series)
+
+| ID | Lacuna | Prioridade | Dono sugerido | Critério de pronto |
+|---|---|---|---|---|
+| L-01 | NRF-1.1 sem spec normativa legível | P0 | Core Runtime | `docs/canon/NRF-1.1.md` ativo + conformance |
+| L-02 | `@world` sem spec semântica formal | P0 | Core Runtime | `docs/canon/WORLD.md` + validação runtime |
+| L-03 | AI Passport fora do mapa canônico oficial | P0 | Identity/Runtime | entrada dedicada no `CANON-REFERENCE` |
+| L-04 | Binding WASM receipt vs canonical receipt incompleto | P1 | Runtime + WASM | seção de composição + testes |
+| L-05 | `fs_read` scoped semantics em WASM capability incompleto | P1 | WASM Runtime | regra runtime + error mapping validado |
+| L-06 | Busca/auditoria ainda fragmentada em múltiplos stores | P0 | Platform Data | agregador fan-in em produção |
+| L-07 | Separação advisor personal/platform ainda parcial | P0 | Identity + Runtime | testes de isolamento em CI |
+
+---
+
+## Fora deste ciclo (explicitamente)
+
+- Features cosméticas de UI sem impacto operacional.
+- Novas superfícies de protocolo sem impacto no core/release.
+- Otimizações prematuras antes de conformance estável.
+
+---
+
+## Cadência de revisão
+
+- Revisão executiva: semanal.
+- Revisão de lacunas L-series: 2x por semana.
+- Atualização de status: toda mudança relevante de fase.
+- Regra: item fechado sem evidência = item reaberto.

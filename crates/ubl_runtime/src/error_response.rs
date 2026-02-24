@@ -34,6 +34,8 @@ pub enum ErrorCode {
     KnockNumericLiteralNotAllowed,
     #[serde(rename = "KNOCK_INPUT_NORMALIZATION")]
     KnockInputNormalization,
+    #[serde(rename = "KNOCK_SCHEMA_VALIDATION")]
+    KnockSchemaValidation,
 
     // Pipeline errors (produce DENY receipt)
     #[serde(rename = "POLICY_DENIED")]
@@ -133,7 +135,8 @@ impl ErrorCode {
             | Self::KnockRawFloat
             | Self::KnockMalformedNum
             | Self::KnockNumericLiteralNotAllowed
-            | Self::KnockInputNormalization => 400,
+            | Self::KnockInputNormalization
+            | Self::KnockSchemaValidation => 400,
 
             Self::PolicyDenied => 403,
             Self::DependencyMissing => 409,
@@ -259,6 +262,7 @@ impl ErrorCode {
                 | Self::KnockMalformedNum
                 | Self::KnockNumericLiteralNotAllowed
                 | Self::KnockInputNormalization
+                | Self::KnockSchemaValidation
                 | Self::Unauthorized
                 | Self::NotFound
                 | Self::TooManyRequests
@@ -389,6 +393,8 @@ fn classify_knock_error(msg: &str) -> ErrorCode {
         ErrorCode::KnockNumericLiteralNotAllowed
     } else if msg.contains("KNOCK-011") {
         ErrorCode::KnockInputNormalization
+    } else if msg.contains("KNOCK-012") {
+        ErrorCode::KnockSchemaValidation
     } else {
         ErrorCode::KnockInvalidUtf8 // fallback
     }
@@ -569,6 +575,7 @@ mod tests {
             ErrorCode::KnockMalformedNum,
             ErrorCode::KnockNumericLiteralNotAllowed,
             ErrorCode::KnockInputNormalization,
+            ErrorCode::KnockSchemaValidation,
         ];
         for code in &codes {
             assert_eq!(code.http_status(), 400, "{:?} should be 400", code);
@@ -608,6 +615,17 @@ mod tests {
         );
         let ubl_err = UblError::from_pipeline_error(&err);
         assert_eq!(ubl_err.code, ErrorCode::KnockInputNormalization);
+        assert_eq!(ubl_err.code.http_status(), 400);
+        assert!(!ubl_err.code.produces_receipt());
+    }
+
+    #[test]
+    fn knock_schema_validation_maps_to_400() {
+        let err = PipelineError::Knock(
+            "KNOCK-012: schema validation failed: task.lifecycle.event.v1: done state requires at least one evidence item".to_string(),
+        );
+        let ubl_err = UblError::from_pipeline_error(&err);
+        assert_eq!(ubl_err.code, ErrorCode::KnockSchemaValidation);
         assert_eq!(ubl_err.code.http_status(), 400);
         assert!(!ubl_err.code.produces_receipt());
     }

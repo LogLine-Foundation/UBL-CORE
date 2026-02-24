@@ -60,6 +60,8 @@ pub enum KnockError {
     NumericLiteralNotAllowed(String),
     #[error("KNOCK-011: input normalization failed: {0}")]
     InputNormalization(String),
+    #[error("KNOCK-012: schema validation failed: {0}")]
+    SchemaValidation(String),
 }
 
 /// Validate raw bytes before JSON parsing.
@@ -106,6 +108,7 @@ fn knock_parsed_with_options(value: &Value, require_unc1: bool) -> Result<(), Kn
     // - validate @num objects
     // - optionally require every numeric literal to be represented as @num
     check_numeric_nodes(value, "$", require_unc1)?;
+    validate_type_specific_schema(value)?;
 
     Ok(())
 }
@@ -141,6 +144,117 @@ fn map_normalization_error(err: anyhow::Error) -> KnockError {
         return KnockError::DuplicateKey(raw.to_string());
     }
     KnockError::InputNormalization(msg)
+}
+
+fn validate_type_specific_schema(value: &Value) -> Result<(), KnockError> {
+    let obj = value.as_object().ok_or(KnockError::NotObject)?;
+    let chip_type = obj
+        .get("@type")
+        .and_then(|v| v.as_str())
+        .ok_or(KnockError::MissingAnchor("@type"))?;
+
+    if chip_type != "task.lifecycle.event.v1" {
+        return Ok(());
+    }
+
+    validate_required_nonempty_string(obj, "@id")?;
+    validate_required_nonempty_string(obj, "@ver")?;
+    validate_required_nonempty_string(obj, "task_id")?;
+    validate_required_nonempty_string(obj, "track")?;
+    validate_required_nonempty_string(obj, "title")?;
+
+    let state = obj.get("state").and_then(|v| v.as_str()).ok_or_else(|| {
+        KnockError::SchemaValidation("task.lifecycle.event.v1: state must be string".to_string())
+    })?;
+
+    let allowed_state = ["open", "blocked", "in_progress", "done", "canceled"];
+    if !allowed_state.contains(&state) {
+        return Err(KnockError::SchemaValidation(format!(
+            "task.lifecycle.event.v1: invalid state {:?}",
+            state
+        )));
+    }
+
+    validate_array_of_strings(obj, "depends_on")?;
+    let evidence_len = validate_array_of_strings(obj, "evidence")?;
+
+    if state == "blocked" {
+        validate_required_nonempty_string(obj, "blocker_code")?;
+    }
+    if state == "done" && evidence_len == 0 {
+        return Err(KnockError::SchemaValidation(
+            "task.lifecycle.event.v1: done state requires at least one evidence item".to_string(),
+        ));
+    }
+
+    let actor = obj
+        .get("actor")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| {
+            KnockError::SchemaValidation(
+                "task.lifecycle.event.v1: actor must be object".to_string(),
+            )
+        })?;
+
+    validate_required_nonempty_string(actor, "did")?;
+    let role = actor.get("role").and_then(|v| v.as_str()).ok_or_else(|| {
+        KnockError::SchemaValidation(
+            "task.lifecycle.event.v1: actor.role must be string".to_string(),
+        )
+    })?;
+    let allowed_role = ["personal", "platform", "operator", "noc"];
+    if !allowed_role.contains(&role) {
+        return Err(KnockError::SchemaValidation(format!(
+            "task.lifecycle.event.v1: invalid actor.role {:?}",
+            role
+        )));
+    }
+
+    Ok(())
+}
+
+fn validate_required_nonempty_string(
+    map: &serde_json::Map<String, serde_json::Value>,
+    field: &str,
+) -> Result<(), KnockError> {
+    let value = map.get(field).and_then(|v| v.as_str()).ok_or_else(|| {
+        KnockError::SchemaValidation(format!("task.lifecycle.event.v1: {} must be string", field))
+    })?;
+
+    if value.trim().is_empty() {
+        return Err(KnockError::SchemaValidation(format!(
+            "task.lifecycle.event.v1: {} must be non-empty",
+            field
+        )));
+    }
+
+    Ok(())
+}
+
+fn validate_array_of_strings(
+    map: &serde_json::Map<String, serde_json::Value>,
+    field: &str,
+) -> Result<usize, KnockError> {
+    let arr = map.get(field).and_then(|v| v.as_array()).ok_or_else(|| {
+        KnockError::SchemaValidation(format!("task.lifecycle.event.v1: {} must be array", field))
+    })?;
+
+    for (idx, item) in arr.iter().enumerate() {
+        let s = item.as_str().ok_or_else(|| {
+            KnockError::SchemaValidation(format!(
+                "task.lifecycle.event.v1: {}[{}] must be string",
+                field, idx
+            ))
+        })?;
+        if s.trim().is_empty() {
+            return Err(KnockError::SchemaValidation(format!(
+                "task.lifecycle.event.v1: {}[{}] must be non-empty",
+                field, idx
+            )));
+        }
+    }
+
+    Ok(arr.len())
 }
 
 fn check_depth(value: &Value, depth: usize) -> Result<(), KnockError> {
@@ -795,5 +909,44 @@ mod tests {
         .unwrap();
         let err = knock(&bytes).unwrap_err().to_string();
         assert!(err.contains("body.profile.name"));
+    }
+
+    #[test]
+    fn knock_accepts_task_lifecycle_event_shape() {
+        let bytes = serde_json::to_vec(&json!({
+            "@id": "task-L-01-open",
+            "@type": "task.lifecycle.event.v1",
+            "@ver": "v1",
+            "@world": "ubl.platform.test",
+            "task_id": "L-01",
+            "track": "track-2",
+            "title": "Publish NRF-1.1 normative spec",
+            "state": "open",
+            "depends_on": [],
+            "evidence": [],
+            "actor": {"did": "did:key:zabc", "role": "platform"}
+        }))
+        .unwrap();
+        assert!(knock(&bytes).is_ok());
+    }
+
+    #[test]
+    fn knock_rejects_task_done_without_evidence() {
+        let bytes = serde_json::to_vec(&json!({
+            "@id": "task-L-01-done",
+            "@type": "task.lifecycle.event.v1",
+            "@ver": "v1",
+            "@world": "ubl.platform.test",
+            "task_id": "L-01",
+            "track": "track-2",
+            "title": "Publish NRF-1.1 normative spec",
+            "state": "done",
+            "depends_on": [],
+            "evidence": [],
+            "actor": {"did": "did:key:zabc", "role": "platform"}
+        }))
+        .unwrap();
+        let err = knock(&bytes).unwrap_err();
+        assert!(matches!(err, KnockError::SchemaValidation(_)));
     }
 }
