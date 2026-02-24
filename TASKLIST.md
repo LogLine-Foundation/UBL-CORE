@@ -29,6 +29,7 @@ Princípio de controle:
 - No bypass: mutação sempre via gate e pipeline canônico.
 - Evidence-first: tudo relevante precisa gerar receipt/auditoria verificável.
 - Honestidade operacional: lacunas ficam explícitas, com dono e critério de pronto.
+- Task orchestration is chip-native: use `docs/ops/TASK_ORCHESTRATION_PROTOCOL.md` + `schemas/task.lifecycle.event.v1.json` for lifecycle transitions and evidence.
 
 ---
 
@@ -39,6 +40,23 @@ Princípio de controle:
 - Busca/auditoria unificadas (fan-in dos stores) com resposta única e verificável.
 - LLM advisor pessoal e advisor de plataforma isolados por identidade/chaves/tokens/stores/logs.
 - LAB 512 com bootstrap oficial, evidência completa e rotina de operação estável.
+
+---
+
+## Orquestracao da Tasklist (imediato)
+
+### Objetivo
+Rodar a própria tasklist pelo pipeline UBL, com receipts em cada transição.
+
+### Itens
+- [ ] Ativar o protocolo `docs/ops/TASK_ORCHESTRATION_PROTOCOL.md`.
+- [ ] Validar schema `schemas/task.lifecycle.event.v1.json` no KNOCK.
+- [ ] Criar os primeiros chips para `L-01..L-05` com estado `open`.
+- [ ] Executar um ciclo completo (`open -> in_progress -> done`) com evidência real.
+- [ ] Publicar recibos em `artifacts/tasks/` e linkar no `TASKLIST.md`.
+
+### DoD
+- 5 transições reais registradas como chips, cada uma com receipt CID.
 
 ---
 

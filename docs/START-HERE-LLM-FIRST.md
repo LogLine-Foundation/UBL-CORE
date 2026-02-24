@@ -74,6 +74,8 @@ If you read only one document to navigate UBL-CORE docs, read this one.
   - `docs/wasm/spec/WASM_ERROR_CODES_V1.md`
 
 - I need operations and rollout:
+  - `docs/ops/TASK_ORCHESTRATION_PROTOCOL.md`
+  - `schemas/task.lifecycle.event.v1.json`
   - `docs/ops/FOREVER_BOOTSTRAP.md`
   - `docs/ops/GITEA_SOURCE_FLOW.md`
   - `docs/ops/MCP_RUNTIME_VALIDATION.md`

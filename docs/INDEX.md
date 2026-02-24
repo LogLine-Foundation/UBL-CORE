@@ -29,6 +29,7 @@ For canonical lacunas tracking and cross-links, use that file as the top-level n
 | Error taxonomy | `crates/ubl_runtime/src/error_response.rs` | Runtime | Active |
 | Test strategy (contract-first) | `TEST_STRATEGY.md` | Core Runtime | Active |
 | WASM runtime hardening tracker | `docs/ops/WASM_RUNTIME_HARDENING_TASKLIST.md` | Core Runtime | Active |
+| Task orchestration protocol | `docs/ops/TASK_ORCHESTRATION_PROTOCOL.md` + `schemas/task.lifecycle.event.v1.json` | Core Runtime + Platform Engineering | Draft |
 | WASM execution spec pack | `docs/wasm/spec/README.md` | Core Runtime | Draft |
 | WASM conformance vectors and schema | `docs/wasm/conformance/README.md` | Core Runtime | Active |
 | Merge/release quality gates | `QUALITY_GATE.md` | Core Runtime + Ops | Active |
