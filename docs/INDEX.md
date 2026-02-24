@@ -4,9 +4,11 @@ This is the secondary index for project documentation.
 
 Primary entry point (LLM-first): `docs/START-HERE-LLM-FIRST.md`.
 
+For canonical lacunas tracking and cross-links, use that file as the top-level navigator.
+
 **Status**: active
 **Owner**: Repo Maintainer
-**Last reviewed**: 2026-02-21
+**Last reviewed**: 2026-02-24
 
 ## Sources of Truth
 
