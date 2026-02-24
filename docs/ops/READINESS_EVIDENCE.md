@@ -1,6 +1,6 @@
 # LAB 512 Readiness Evidence Log
 
-Last updated: 2026-02-24T03:08:12Z
+Last updated: 2026-02-24T03:12:14Z
 
 ## Phase 3 — Bootstrap Pipeline Hardening
 
@@ -46,6 +46,12 @@ Last updated: 2026-02-24T03:08:12Z
   - Command: `rg -n "promotion checklist|LAB 256 -> LAB 512" /Users/ubl-ops/UBL-CORE/docs/ops`
   - Evidence: no promotion checklist doc or signoff log found in repo.
 
+## Phase 1 — Architecture Validation for LAB 512
+
+- Phase 1 doc scan (topology, canary/dual-plane, handoff, failure/rollback).
+  - Command: `bash -lc 'set -euo pipefail; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ); out=/Users/ubl-ops/UBL-CORE/artifacts/readiness/2026-02-24_phase1_review.txt; mkdir -p /Users/ubl-ops/UBL-CORE/artifacts/readiness; { echo "Timestamp (UTC): $ts"; echo "PWD: $(pwd)"; echo; echo "## Topology references"; rg -n "control plane|data plane|topology" /Users/ubl-ops/UBL-CORE/docs/ops || true; echo; echo "## EPISODE_1_PROTOCOL.md (1-80)"; sed -n "1,80p" /Users/ubl-ops/UBL-CORE/docs/ops/EPISODE_1_PROTOCOL.md; echo; echo "## Canary/dual-plane references"; rg -n "canary|dual-plane" /Users/ubl-ops/UBL-CORE/docs/ops || true; echo; echo "## BOOTSTRAP_FINAL_TEXT.md (20-200)"; sed -n "20,200p" /Users/ubl-ops/UBL-CORE/docs/ops/BOOTSTRAP_FINAL_TEXT.md; echo; echo "## Handoff/replication references"; rg -n "handoff|replic|sync" /Users/ubl-ops/UBL-CORE/docs/ops || true; echo; echo "## Failure/rollback references"; rg -n "failure|rollback|recover" /Users/ubl-ops/UBL-CORE/docs/ops || true; } > "$out"; echo "$out"'`
+  - Evidence: `/Users/ubl-ops/UBL-CORE/artifacts/readiness/2026-02-24_phase1_review.txt`.
+
 ## Phase 0-6 — Blocker Assessment Snapshot (LAB 256-safe)
 
 - Snapshot of current repo state and supporting documentation references.
@@ -75,14 +81,17 @@ Last updated: 2026-02-24T03:08:12Z
   - Command: `sed -n '1,200p' /Users/ubl-ops/UBL-CORE/docs/ops/CLOUDFLARE_EDGE_BASELINE.md`
   - Command: `sed -n '1,240p' /Users/ubl-ops/UBL-CORE/docs/ops/CLOUDFLARE_TUNNEL_GO_LIVE.md`
   - Evidence: checklist requires Access app/policy creation and confirmation before setting `UBL_CLOUDFLARE_ACCESS_POLICY_CONFIRMED=true`; no Cloudflare account context available in this environment.
+  - Update (2026-02-24T02:50:22Z): no Cloudflare credentials present in environment (`CLOUDFLARE*`/`CF_*`), so Access app/policy prerequisites cannot be verified or updated.
 
 - Tunnel + DNS automation path requires Cloudflare account access and tunnel IDs.
   - Command: `sed -n '1,240p' /Users/ubl-ops/UBL-CORE/docs/ops/CLOUDFLARE_TUNNEL_GO_LIVE.md`
   - Evidence: go-live steps require Zero Trust tunnel creation, Access policy setup, and tunnel ID mapping for `ubl.agency`, `api.ubl.agency`, `logline.world`.
+  - Update (2026-02-24T02:50:22Z): no Cloudflare API token or tunnel IDs available in environment; tunnel/DNS changes could not be applied.
 
 - Edge rate limiting rule registry not populated.
   - Command: `rg -n "rate limit|rule ID" /Users/ubl-ops/UBL-CORE/docs/ops`
   - Evidence: docs specify storing rule IDs in `UBL_CLOUDFLARE_RATE_LIMIT_RULES` or `${UBL_BASE_DIR}/state/cloudflare_rate_limit.json`, but no IDs available in this environment.
+  - Update (2026-02-24T02:50:22Z): no Cloudflare credentials available to query or confirm rate limit rule IDs.
 
 - Receipt URL model confirmation requires operator signoff.
   - Command: `rg -n "receipt model|logline.world|/r#ubl:v1" /Users/ubl-ops/UBL-CORE/docs/ops`
@@ -117,6 +126,7 @@ Last updated: 2026-02-24T03:08:12Z
   - Update (2026-02-23T20:45:20Z): repeated public endpoint checks; DNS resolution still failed for all tested public hosts.
   - Update (2026-02-23T20:50:15Z): repeated public endpoint checks; DNS resolution still failed for ubl.agency, api.ubl.agency, logline.world.
   - Update (2026-02-24T02:44:47Z): repeated public endpoint checks; DNS resolution still failed for ubl.agency, api.ubl.agency, logline.world.
+  - Update (2026-02-24T02:50:22Z): repeated public endpoint checks; DNS resolution still failed (curl: could not resolve host for api.ubl.agency).
   - Manual steps (operator):
     - From a network with external DNS, confirm:
       - `curl -I -sS https://api.ubl.agency/healthz`

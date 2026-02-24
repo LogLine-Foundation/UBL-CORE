@@ -42,26 +42,26 @@ Parallel execution program: `docs/ops/WASM_RUNTIME_HARDENING_TASKLIST.md` (WASM 
 - [ ] Define production topology with two UBL copies:
   - control + ingestion plane
   - data/serving plane
-  - Blocker: Additional operator input is pending to finalize topology specifics beyond existing docs.
-  - Next: `rg -n "control plane|data plane|topology" /Users/ubl-ops/UBL-CORE/docs/ops` before drafting the topology section.
+  - Blocker: Small/Big plane references exist in `docs/ops/EPISODE_1_PROTOCOL.md` and `docs/ops/BOOTSTRAP_FINAL_TEXT.md`, but no explicit topology section is approved as normative.
+  - Next: `rg -n "control plane|data plane|topology" /Users/ubl-ops/UBL-CORE/docs/ops` then draft a topology section for operator approval.
 - [ ] Formalize Episode 1 protocol as normative contract (`docs/ops/EPISODE_1_PROTOCOL.md`).
-  - Blocker: Protocol is marked "active" but not explicitly declared "normative contract" by operator.
-  - Next: `sed -n '1,60p' /Users/ubl-ops/UBL-CORE/docs/ops/EPISODE_1_PROTOCOL.md` before updating status text.
+  - Blocker: `docs/ops/EPISODE_1_PROTOCOL.md` status remains "active"; no operator approval to mark it as a normative contract.
+  - Next: `sed -n '1,80p' /Users/ubl-ops/UBL-CORE/docs/ops/EPISODE_1_PROTOCOL.md` then update status line after operator approval.
 - [ ] Replace old canary concept with dual-plane validation protocol.
-  - Blocker: Dual-plane validation protocol is not documented; old canary doc still exists.
-  - Next: `rg -n "canary|dual-plane" /Users/ubl-ops/UBL-CORE/docs/ops` before drafting replacement protocol.
+  - Blocker: `docs/ops/PRODUCTION_SLICE_CANARY.md` still documents canary behavior; no dual-plane validation protocol doc exists yet.
+  - Next: `rg -n "canary|dual-plane" /Users/ubl-ops/UBL-CORE/docs/ops` then draft dual-plane validation protocol for approval.
 - [ ] Define control-plane responsibilities (ingest, governance, policy transitions, orchestration).
-  - Blocker: Responsibilities exist in narrative form but not formalized as a normative contract section.
-  - Next: `sed -n '20,140p' /Users/ubl-ops/UBL-CORE/docs/ops/BOOTSTRAP_FINAL_TEXT.md` before formalizing.
+  - Blocker: Responsibilities are described in `docs/ops/BOOTSTRAP_FINAL_TEXT.md` but not formalized as a normative contract section.
+  - Next: `sed -n '20,200p' /Users/ubl-ops/UBL-CORE/docs/ops/BOOTSTRAP_FINAL_TEXT.md` then formalize a control-plane contract section.
 - [ ] Define data-plane responsibilities (query/read APIs, receipts retrieval, CAS delivery, performance isolation).
-  - Blocker: Responsibilities exist in narrative form but not formalized as a normative contract section.
-  - Next: `sed -n '20,160p' /Users/ubl-ops/UBL-CORE/docs/ops/BOOTSTRAP_FINAL_TEXT.md` before formalizing.
+  - Blocker: Responsibilities are described in `docs/ops/BOOTSTRAP_FINAL_TEXT.md` but not formalized as a normative contract section.
+  - Next: `sed -n '20,200p' /Users/ubl-ops/UBL-CORE/docs/ops/BOOTSTRAP_FINAL_TEXT.md` then formalize a data-plane contract section.
 - [ ] Define deterministic handoff contract between planes (what is replicated, when, and how verified).
-  - Blocker: No documented handoff/replication contract is present.
-  - Next: `rg -n "handoff|replic|sync" /Users/ubl-ops/UBL-CORE/docs/ops` before drafting handoff contract.
+  - Blocker: No dedicated handoff/replication contract doc found; references are scattered in specs/runbooks only.
+  - Next: `rg -n "handoff|replic|sync" /Users/ubl-ops/UBL-CORE/docs/ops` then draft a handoff contract section for approval.
 - [ ] Document failure modes and rollback paths per plane.
-  - Blocker: Failure modes/rollback paths are not documented per plane.
-  - Next: `rg -n "failure|rollback|recover" /Users/ubl-ops/UBL-CORE/docs/ops` before adding rollback paths.
+  - Blocker: Failure/rollback references exist across specs/runbooks, but no per-plane rollback section is documented.
+  - Next: `rg -n "failure|rollback|recover" /Users/ubl-ops/UBL-CORE/docs/ops` then draft per-plane rollback paths for approval.
 - [x] Ingest Episode 1 prompt pack into a tracked implementation intake.
   - Evidence: `/Users/ubl-ops/UBL-CORE/docs/ops/EPISODE_1_PROMPTS_INTAKE.md`.
   - Note: Intake maps prompts 01..09 to spec outputs and defines execution order without replacing normative protocol text.
