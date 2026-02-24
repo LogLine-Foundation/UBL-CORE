@@ -1,6 +1,6 @@
 # LAB 512 Readiness Evidence Log
 
-Last updated: 2026-02-24T03:12:52Z
+Last updated: 2026-02-24T03:13:34Z
 
 ## Phase 3 — Bootstrap Pipeline Hardening
 
@@ -45,6 +45,10 @@ Last updated: 2026-02-24T03:12:52Z
 - Promotion checklist document/signoff not present.
   - Command: `rg -n "promotion checklist|LAB 256 -> LAB 512" /Users/ubl-ops/UBL-CORE/docs/ops`
   - Evidence: no promotion checklist doc or signoff log found in repo.
+
+- Phase 5 doc scan (WF workflow, reproducibility/attestation, promotion checklist).
+  - Command: `bash -lc 'set -euo pipefail; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ); out=/Users/ubl-ops/UBL-CORE/artifacts/readiness/2026-02-24_phase5_review.txt; mkdir -p /Users/ubl-ops/UBL-CORE/artifacts/readiness; { echo "Timestamp (UTC): $ts"; echo "PWD: $(pwd)"; echo; echo "## WF workflow references"; rg -n "WF" /Users/ubl-ops/UBL-CORE/.github/workflows || true; echo; echo "## Reproducibility/attestation references"; rg -n "reproducibility|attestation" /Users/ubl-ops/UBL-CORE/docs/ops || true; echo; echo "## Promotion checklist references"; rg -n "promotion checklist|LAB 256 -> LAB 512" /Users/ubl-ops/UBL-CORE/docs/ops || true; } > "$out"; echo "$out"'`
+  - Evidence: `/Users/ubl-ops/UBL-CORE/artifacts/readiness/2026-02-24_phase5_review.txt`.
 
 ## Phase 1 — Architecture Validation for LAB 512
 

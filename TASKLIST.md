@@ -143,14 +143,14 @@ Parallel execution program: `docs/ops/WASM_RUNTIME_HARDENING_TASKLIST.md` (WASM 
 - [x] `make contract` passes.
 - [x] `make conformance` passes.
 - [ ] CI `WF` gate passes with CONTRACT + CONFORMANCE.
-  - Blocker: No CI run ID or output captured for the `WF` gate.
-  - Next: `rg -n "WF" /Users/ubl-ops/UBL-CORE/.github/workflows` before triggering/inspecting the workflow.
+  - Blocker: Workflow exists (`.github/workflows/ci.yml`), but no CI run ID/output captured for the `WF` gate.
+  - Next: `gh run list --workflow ci.yml --limit 5` on a CI-authenticated host, then capture run ID + logs.
 - [ ] Reproducibility/attestation checks pass for target commit.
-  - Blocker: Reproducibility/attestation runbook or automation not located in repo.
-  - Next: `rg -n "reproducibility|attestation" /Users/ubl-ops/UBL-CORE/docs/ops` before drafting checks.
+  - Blocker: References to reproducibility/attestation exist (for example `docs/ops/FOREVER_BOOTSTRAP.md`), but no dedicated runbook or recorded check for the target commit is present.
+  - Next: `rg -n "reproducibility|attestation" /Users/ubl-ops/UBL-CORE/docs/ops` then draft a reproducibility/attestation runbook for approval.
 - [ ] Promotion checklist (`LAB 256 -> LAB 512`) signed off.
-  - Blocker: Promotion checklist document and signoff log not present.
-  - Next: `rg -n "promotion checklist|LAB 256 -> LAB 512" /Users/ubl-ops/UBL-CORE/docs/ops` before drafting checklist.
+  - Blocker: Promotion checklist document and signoff log not present in repo.
+  - Next: `rg -n "promotion checklist|LAB 256 -> LAB 512" /Users/ubl-ops/UBL-CORE/docs/ops` then draft checklist + signoff log template for approval.
 
 ---
 
