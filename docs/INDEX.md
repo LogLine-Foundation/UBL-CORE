@@ -1,6 +1,8 @@
 # UBL Documentation Index
 
-This is the entry point for all project documentation.
+This is the secondary index for project documentation.
+
+Primary entry point (LLM-first): `docs/START-HERE-LLM-FIRST.md`.
 
 **Status**: active
 **Owner**: Repo Maintainer

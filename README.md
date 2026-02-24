@@ -56,7 +56,8 @@ Process references:
 
 ## Documentation
 
-- Entry point: `docs/INDEX.md`
+- Primary entry point (LLM-first): `docs/START-HERE-LLM-FIRST.md`
+- Secondary index: `docs/INDEX.md`
 - Canonical runtime entrypoint: `START-HERE.md`
 - Architecture: `ARCHITECTURE.md`
 - Security policy: `SECURITY.md`
