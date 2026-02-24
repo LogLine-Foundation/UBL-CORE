@@ -1,6 +1,6 @@
 # LAB 512 Readiness Evidence Log
 
-Last updated: 2026-02-23T20:50:15Z
+Last updated: 2026-02-24T03:08:12Z
 
 ## Phase 3 — Bootstrap Pipeline Hardening
 
@@ -34,6 +34,18 @@ Last updated: 2026-02-23T20:50:15Z
   - Command: `cd /Users/ubl-ops/UBL-CORE && make conformance`
   - Evidence: `artifacts/conformance/latest.json`, `artifacts/conformance/latest.md`.
 
+- CI `WF` gate requires CI run ID.
+  - Command: `rg -n "WF" /Users/ubl-ops/UBL-CORE/.github/workflows`
+  - Evidence: `WF` gate defined in `.github/workflows/ci.yml` and depends on CI execution; no CI run available in this environment.
+
+- Reproducibility/attestation checks not executed for target commit.
+  - Command: `rg -n "reproducibility|attestation" /Users/ubl-ops/UBL-CORE/docs/ops`
+  - Evidence: reproducibility/attestation references exist (for example `docs/ops/FOREVER_BOOTSTRAP.md`, `docs/ops/INCIDENT_RUNBOOK.md`), but no runbook or recorded check for the target commit is present.
+
+- Promotion checklist document/signoff not present.
+  - Command: `rg -n "promotion checklist|LAB 256 -> LAB 512" /Users/ubl-ops/UBL-CORE/docs/ops`
+  - Evidence: no promotion checklist doc or signoff log found in repo.
+
 ## Phase 0-6 — Blocker Assessment Snapshot (LAB 256-safe)
 
 - Snapshot of current repo state and supporting documentation references.
@@ -49,6 +61,7 @@ Last updated: 2026-02-23T20:50:15Z
   - Update (2026-02-23T14:50:19Z): rechecked env; only `__CF_USER_TEXT_ENCODING` present, no API token/tunnel IDs available.
   - Update (2026-02-23T20:45:20Z): rechecked env; no Cloudflare tokens or tunnel IDs available in session.
   - Update (2026-02-23T20:50:15Z): rechecked env; only `__CF_USER_TEXT_ENCODING` present, no Cloudflare API token/tunnel IDs available.
+  - Update (2026-02-24T02:44:47Z): rechecked env; no Cloudflare tokens or tunnel IDs available in session.
   - Manual steps (operator):
     - Confirm Cloudflare Access policy is active, then set in bootstrap env:
       - `UBL_CLOUDFLARE_ENABLE=true`
@@ -58,6 +71,23 @@ Last updated: 2026-02-23T20:50:15Z
     - Configure rate limit rules for `/v1/chips` and `/v1/receipts`; record rule IDs in:
       - `UBL_CLOUDFLARE_RATE_LIMIT_RULES` or `${UBL_BASE_DIR}/state/cloudflare_rate_limit.json`.
 
+- Cloudflare Access app/policy prerequisites require operator confirmation.
+  - Command: `sed -n '1,200p' /Users/ubl-ops/UBL-CORE/docs/ops/CLOUDFLARE_EDGE_BASELINE.md`
+  - Command: `sed -n '1,240p' /Users/ubl-ops/UBL-CORE/docs/ops/CLOUDFLARE_TUNNEL_GO_LIVE.md`
+  - Evidence: checklist requires Access app/policy creation and confirmation before setting `UBL_CLOUDFLARE_ACCESS_POLICY_CONFIRMED=true`; no Cloudflare account context available in this environment.
+
+- Tunnel + DNS automation path requires Cloudflare account access and tunnel IDs.
+  - Command: `sed -n '1,240p' /Users/ubl-ops/UBL-CORE/docs/ops/CLOUDFLARE_TUNNEL_GO_LIVE.md`
+  - Evidence: go-live steps require Zero Trust tunnel creation, Access policy setup, and tunnel ID mapping for `ubl.agency`, `api.ubl.agency`, `logline.world`.
+
+- Edge rate limiting rule registry not populated.
+  - Command: `rg -n "rate limit|rule ID" /Users/ubl-ops/UBL-CORE/docs/ops`
+  - Evidence: docs specify storing rule IDs in `UBL_CLOUDFLARE_RATE_LIMIT_RULES` or `${UBL_BASE_DIR}/state/cloudflare_rate_limit.json`, but no IDs available in this environment.
+
+- Receipt URL model confirmation requires operator signoff.
+  - Command: `rg -n "receipt model|logline.world|/r#ubl:v1" /Users/ubl-ops/UBL-CORE/docs/ops`
+  - Evidence: `docs/ops/BOOTSTRAP_FINAL_TEXT.md` defines `https://logline.world/r#ubl:v1:<token>` as the public receipt URL; no operator confirmation recorded.
+
 ## MCP + API Endpoint Validation
 
 - Local runtime health check failed (no local gate running).
@@ -65,6 +95,7 @@ Last updated: 2026-02-23T20:50:15Z
   - Evidence: connection refused (2026-02-23T14:44:58Z).
   - Update (2026-02-23T20:45:20Z): connection refused; gate still not running locally.
   - Update (2026-02-23T20:50:15Z): connection refused; gate still not running locally.
+  - Update (2026-02-24T02:44:47Z): connection refused; gate still not running locally.
   - Manual steps (operator):
     - Start the gate locally, then re-run:
       - `curl -sS http://127.0.0.1:4000/healthz`
@@ -85,6 +116,7 @@ Last updated: 2026-02-23T20:50:15Z
   - Update (2026-02-23T14:50:19Z): repeated public endpoint checks; DNS resolution still failed for all tested public hosts.
   - Update (2026-02-23T20:45:20Z): repeated public endpoint checks; DNS resolution still failed for all tested public hosts.
   - Update (2026-02-23T20:50:15Z): repeated public endpoint checks; DNS resolution still failed for ubl.agency, api.ubl.agency, logline.world.
+  - Update (2026-02-24T02:44:47Z): repeated public endpoint checks; DNS resolution still failed for ubl.agency, api.ubl.agency, logline.world.
   - Manual steps (operator):
     - From a network with external DNS, confirm:
       - `curl -I -sS https://api.ubl.agency/healthz`
